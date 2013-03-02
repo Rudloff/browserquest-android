@@ -71,6 +71,7 @@ define(['jquery', 'storage'], function($, Storage) {
             if(starting_callback) {
                 starting_callback();
             }
+            window.plugins.statusBarNotification.notify('BrowserQuest', 'BrowserQuest is running.', Flag.FLAG_NO_CLEAR);
             this.hideIntro(function() {
                 if(!self.isDesktop || !this.supportsWorkers) {
                     // On mobile and tablet we load the map after the player has clicked
@@ -82,6 +83,9 @@ define(['jquery', 'storage'], function($, Storage) {
         },
 
         start: function(username) {
+            document.addEventListener('deviceready', function () {
+                window.plugins.statusBarNotification.notify('BrowserQuest', 'BrowserQuest is running.', Flag.FLAG_NO_CLEAR);
+            }, false);
             var self = this,
                 firstTimePlaying = !self.storage.hasAlreadyPlayed();
             

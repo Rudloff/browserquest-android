@@ -1,1 +1,2454 @@
-define("infomanager",[],function(){var a=Class.extend({init:function(a){this.game=a,this.infos={},this.destroyQueue=[]},addDamageInfo:function(a,b,d,e){var f=this.game.currentTime,g=f+""+Math.abs(a)+""+b+""+d,h=this,i=new c(g,a,b,d,c.DURATION,e);i.onDestroy(function(a){h.destroyQueue.push(a)}),this.infos[g]=i},forEachInfo:function(a){var b=this;_.each(this.infos,function(b,c){a(b)})},update:function(a){var b=this;this.forEachInfo(function(b){b.update(a)}),_.each(this.destroyQueue,function(a){delete b.infos[a]}),this.destroyQueue=[]}}),b={received:{fill:"rgb(255, 50, 50)",stroke:"rgb(255, 180, 180)"},inflicted:{fill:"white",stroke:"#373737"},healed:{fill:"rgb(80, 255, 80)",stroke:"rgb(50, 120, 50)"}},c=Class.extend({DURATION:1e3,init:function(a,c,d,e,f,g){this.id=a,this.value=c,this.duration=f,this.x=d,this.y=e,this.opacity=1,this.lastTime=0,this.speed=100,this.fillColor=b[g].fill,this.strokeColor=b[g].stroke},isTimeToAnimate:function(a){return a-this.lastTime>this.speed},update:function(a){this.isTimeToAnimate(a)&&(this.lastTime=a,this.tick())},tick:function(){this.y-=1,this.opacity-=.07,this.opacity<0&&this.destroy()},onDestroy:function(a){this.destroy_callback=a},destroy:function(){this.destroy_callback&&this.destroy_callback(this.id)}});return a}),define("timer",[],function(){var a=Class.extend({init:function(a,b){this.lastTime=b||0,this.duration=a},isOver:function(a){var b=!1;a-this.lastTime>this.duration&&(b=!0,this.lastTime=a);return b}});return a}),define("bubble",["jquery","timer"],function(a,b){var c=Class.extend({init:function(a,c,d){this.id=a,this.element=c,this.timer=new b(5e3,d)},isOver:function(a){return this.timer.isOver(a)?!0:!1},destroy:function(){a(this.element).remove()},reset:function(a){this.timer.lastTime=a}}),d=Class.extend({init:function(a){this.container=a,this.bubbles={}},getBubbleById:function(a){return a in this.bubbles?this.bubbles[a]:null},create:function(b,d,e){if(this.bubbles[b])this.bubbles[b].reset(e),a("#"+b+" p").html(d);else{var f=a('<div id="'+b+'" class="bubble"><p>'+d+'</p><div class="thingy"></div></div>');a(f).appendTo(this.container),this.bubbles[b]=new c(b,f,e)}},update:function(a){var b=this,c=[];_.each(this.bubbles,function(b){b.isOver(a)&&(b.destroy(),c.push(b.id))}),_.each(c,function(a){delete b.bubbles[a]})},clean:function(){var a=this,b=[];_.each(this.bubbles,function(a){a.destroy(),b.push(a.id)}),_.each(b,function(b){delete a.bubbles[b]}),this.bubbles={}},destroyBubble:function(a){var b=this.getBubbleById(a);b&&(b.destroy(),delete this.bubbles[a])},forEachBubble:function(a){_.each(this.bubbles,function(b){a(b)})}});return d}),define("camera",[],function(){var a=Class.extend({init:function(a){this.renderer=a,this.x=0,this.y=0,this.gridX=0,this.gridY=0,this.offset=.5,this.rescale()},rescale:function(){var a=this.renderer.mobile?1:2;this.gridW=15*a,this.gridH=7*a,log.debug("---------"),log.debug("Factor:"+a),log.debug("W:"+this.gridW+" H:"+this.gridH)},setPosition:function(a,b){this.x=a,this.y=b,this.gridX=Math.floor(a/16),this.gridY=Math.floor(b/16)},setGridPosition:function(a,b){this.gridX=a,this.gridY=b,this.x=this.gridX*16,this.y=this.gridY*16},lookAt:function(a){var b=this.renderer,c=Math.round(a.x-Math.floor(this.gridW/2)*b.tilesize),d=Math.round(a.y-Math.floor(this.gridH/2)*b.tilesize);this.setPosition(c,d)},forEachVisiblePosition:function(a,b){var b=b||0;for(var c=this.gridY-b,d=this.gridY+this.gridH+b*2;c<d;c+=1)for(var e=this.gridX-b,f=this.gridX+this.gridW+b*2;e<f;e+=1)a(e,c)},isVisible:function(a){return this.isVisiblePosition(a.gridX,a.gridY)},isVisiblePosition:function(a,b){return b>=this.gridY&&b<this.gridY+this.gridH&&a>=this.gridX&&a<this.gridX+this.gridW?!0:!1},focusEntity:function(a){var b=this.gridW-2,c=this.gridH-2,d=Math.floor((a.gridX-1)/b)*b,e=Math.floor((a.gridY-1)/c)*c;this.setGridPosition(d,e)}});return a}),define("entity",[],function(){var a=Class.extend({init:function(a,b){var c=this;this.id=a,this.kind=b,this.sprite=null,this.flipSpriteX=!1,this.flipSpriteY=!1,this.animations=null,this.currentAnimation=null,this.shadowOffsetY=0,this.setGridPosition(0,0),this.isLoaded=!1,this.isHighlighted=!1,this.visible=!0,this.isFading=!1,this.setDirty()},setName:function(a){this.name=a},setPosition:function(a,b){this.x=a,this.y=b},setGridPosition:function(a,b){this.gridX=a,this.gridY=b,this.setPosition(a*16,b*16)},setSprite:function(a){if(!a){log.error(this.id+" : sprite is null",!0);throw"Error"}if(!this.sprite||this.sprite.name!==a.name){this.sprite=a,this.normalSprite=this.sprite;if(Types.isMob(this.kind)||Types.isPlayer(this.kind))this.hurtSprite=a.getHurtSprite();this.animations=a.createAnimations(),this.isLoaded=!0,this.ready_func&&this.ready_func()}},getSprite:function(){return this.sprite},getSpriteName:function(){return Types.getKindAsString(this.kind)},getAnimationByName:function(a){var b=null;a in this.animations?b=this.animations[a]:log.error("No animation called "+a);return b},setAnimation:function(a,b,c,d){var e=this;if(this.isLoaded){if(this.currentAnimation&&this.currentAnimation.name===a)return;var f=this.sprite,g=this.getAnimationByName(a);g&&(this.currentAnimation=g,a.substr(0,3)==="atk"&&this.currentAnimation.reset(),this.currentAnimation.setSpeed(b),this.currentAnimation.setCount(c?c:0,d||function(){e.idle()}))}else this.log_error("Not ready for animation")},hasShadow:function(){return!1},ready:function(a){this.ready_func=a},clean:function(){this.stopBlinking()},log_info:function(a){log.info("["+this.id+"] "+a)},log_error:function(a){log.error("["+this.id+"] "+a)},setHighlight:function(a){a===!0?(this.sprite=this.sprite.silhouetteSprite,this.isHighlighted=!0):(this.sprite=this.normalSprite,this.isHighlighted=!1)},setVisible:function(a){this.visible=a},isVisible:function(){return this.visible},toggleVisibility:function(){this.visible?this.setVisible(!1):this.setVisible(!0)},getDistanceToEntity:function(a){var b=Math.abs(a.gridX-this.gridX),c=Math.abs(a.gridY-this.gridY);return b>c?b:c},isCloseTo:function(a){var b,c,d,e=!1;a&&(b=Math.abs(a.gridX-this.gridX),c=Math.abs(a.gridY-this.gridY),b<30&&c<14&&(e=!0));return e},isAdjacent:function(a){var b=!1;a&&(b=this.getDistanceToEntity(a)>1?!1:!0);return b},isAdjacentNonDiagonal:function(a){var b=!1;this.isAdjacent(a)&&(this.gridX===a.gridX||this.gridY===a.gridY)&&(b=!0);return b},isDiagonallyAdjacent:function(a){return this.isAdjacent(a)&&!this.isAdjacentNonDiagonal(a)},forEachAdjacentNonDiagonalPosition:function(a){a(this.gridX-1,this.gridY,Types.Orientations.LEFT),a(this.gridX,this.gridY-1,Types.Orientations.UP),a(this.gridX+1,this.gridY,Types.Orientations.RIGHT),a(this.gridX,this.gridY+1,Types.Orientations.DOWN)},fadeIn:function(a){this.isFading=!0,this.startFadingTime=a},blink:function(a,b){var c=this;this.blinking=setInterval(function(){c.toggleVisibility()},a)},stopBlinking:function(){this.blinking&&clearInterval(this.blinking),this.setVisible(!0)},setDirty:function(){this.isDirty=!0,this.dirty_callback&&this.dirty_callback(this)},onDirty:function(a){this.dirty_callback=a}});return a}),define("item",["entity"],function(a){var b=a.extend({init:function(a,b,c){this._super(a,b),this.itemKind=Types.getKindAsString(b),this.type=c,this.wasDropped=!1},hasShadow:function(){return!0},onLoot:function(a){this.type==="weapon"?a.switchWeapon(this.itemKind):this.type==="armor"&&a.armorloot_callback(this.itemKind)},getSpriteName:function(){return"item-"+this.itemKind},getLootMessage:function(){return this.lootMessage}});return b}),define("transition",[],function(){var a=Class.extend({init:function(){this.startValue=0,this.endValue=0,this.duration=0,this.inProgress=!1},start:function(a,b,c,d,e,f){this.startTime=a,this.updateFunction=b,this.stopFunction=c,this.startValue=d,this.endValue=e,this.duration=f,this.inProgress=!0,this.count=0},step:function(a){if(this.inProgress)if(this.count>0)this.count-=1,log.debug(a+": jumped frame");else{var b=a-this.startTime;b>this.duration&&(b=this.duration);var c=this.endValue-this.startValue,d=this.startValue+c/this.duration*b;d=Math.round(d),b===this.duration||d===this.endValue?(this.stop(),this.stopFunction&&this.stopFunction()):this.updateFunction&&this.updateFunction(d)}},restart:function(a,b,c){this.start(a,this.updateFunction,this.stopFunction,b,c,this.duration),this.step(a)},stop:function(){this.inProgress=!1}});return a}),define("character",["entity","transition","timer"],function(a,b,c){var d=a.extend({init:function(a,c){var d=this;this._super(a,c),this.nextGridX=-1,this.nextGridY=-1,this.orientation=Types.Orientations.DOWN,this.atkSpeed=50,this.moveSpeed=120,this.walkSpeed=100,this.idleSpeed=450,this.setAttackRate(800),this.movement=new b,this.path=null,this.newDestination=null,this.adjacentTiles={},this.target=null,this.unconfirmedTarget=null,this.attackers={},this.hitPoints=0,this.maxHitPoints=0,this.isDead=!1,this.attackingMode=!1,this.followingMode=!1},clean:function(){this.forEachAttacker(function(a){a.disengage(),a.idle()})},setMaxHitPoints:function(a){this.maxHitPoints=a,this.hitPoints=a},setDefaultAnimation:function(){this.idle()},hasWeapon:function(){return!1},hasShadow:function(){return!0},animate:function(a,b,c,d){var e=["atk","walk","idle"];o=this.orientation;if(!this.currentAnimation||this.currentAnimation.name!=="death")this.flipSpriteX=!1,this.flipSpriteY=!1,_.indexOf(e,a)>=0&&(a+="_"+(o===Types.Orientations.LEFT?"right":Types.getOrientationAsString(o)),this.flipSpriteX=this.orientation===Types.Orientations.LEFT?!0:!1),this.setAnimation(a,b,c,d)},turnTo:function(a){this.orientation=a,this.idle()},setOrientation:function(a){a&&(this.orientation=a)},idle:function(a){this.setOrientation(a),this.animate("idle",this.idleSpeed)},hit:function(a){this.setOrientation(a),this.animate("atk",this.atkSpeed,1)},walk:function(a){this.setOrientation(a),this.animate("walk",this.walkSpeed)},moveTo_:function(a,b,c){this.destination={gridX:a,gridY:b},this.adjacentTiles={};if(this.isMoving())this.continueTo(a,b);else{var d=this.requestPathfindingTo(a,b);this.followPath(d)}},requestPathfindingTo:function(a,b){if(this.request_path_callback)return this.request_path_callback(a,b);log.error(this.id+" couldn't request pathfinding to "+a+", "+b);return[]},onRequestPath:function(a){this.request_path_callback=a},onStartPathing:function(a){this.start_pathing_callback=a},onStopPathing:function(a){this.stop_pathing_callback=a},followPath:function(a){a.length>1&&(this.path=a,this.step=0,this.followingMode&&a.pop(),this.start_pathing_callback&&this.start_pathing_callback(a),this.nextStep())},continueTo:function(a,b){this.newDestination={x:a,y:b}},updateMovement:function(){var a=this.path,b=this.step;a[b][0]<a[b-1][0]&&this.walk(Types.Orientations.LEFT),a[b][0]>a[b-1][0]&&this.walk(Types.Orientations.RIGHT),a[b][1]<a[b-1][1]&&this.walk(Types.Orientations.UP),a[b][1]>a[b-1][1]&&this.walk(Types.Orientations.DOWN)},updatePositionOnGrid:function(){this.setGridPosition(this.path[this.step][0],this.path[this.step][1])},nextStep:function(){var a=!1,b,c,d;this.isMoving()&&(this.before_step_callback&&this.before_step_callback(),this.updatePositionOnGrid(),this.checkAggro(),this.interrupted?(a=!0,this.interrupted=!1):(this.hasNextStep()&&(this.nextGridX=this.path[this.step+1][0],this.nextGridY=this.path[this.step+1][1]),this.step_callback&&this.step_callback(),this.hasChangedItsPath()?(b=this.newDestination.x,c=this.newDestination.y,d=this.requestPathfindingTo(b,c),this.newDestination=null,d.length<2?a=!0:this.followPath(d)):this.hasNextStep()?(this.step+=1,this.updateMovement()):a=!0),a&&(this.path=null,this.idle(),this.stop_pathing_callback&&this.stop_pathing_callback(this.gridX,this.gridY)))},onBeforeStep:function(a){this.before_step_callback=a},onStep:function(a){this.step_callback=a},isMoving:function(){return this.path!==null},hasNextStep:function(){return this.path.length-1>this.step},hasChangedItsPath:function(){return this.newDestination!==null},isNear:function(a,b){var c,d,e=!1;c=Math.abs(this.gridX-a.gridX),d=Math.abs(this.gridY-a.gridY),c<=b&&d<=b&&(e=!0);return e},onAggro:function(a){this.aggro_callback=a},onCheckAggro:function(a){this.checkaggro_callback=a},checkAggro:function(){this.checkaggro_callback&&this.checkaggro_callback()},aggro:function(a){this.aggro_callback&&this.aggro_callback(a)},onDeath:function(a){this.death_callback=a},lookAtTarget:function(){this.target&&this.turnTo(this.getOrientationTo(this.target))},go:function(a,b){this.isAttacking()?this.disengage():this.followingMode&&(this.followingMode=!1,this.target=null),this.moveTo_(a,b)},follow:function(a){a&&(this.followingMode=!0,this.moveTo_(a.gridX,a.gridY))},stop:function(){this.isMoving()&&(this.interrupted=!0)},engage:function(a){this.attackingMode=!0,this.setTarget(a),this.follow(a)},disengage:function(){this.attackingMode=!1,this.followingMode=!1,this.removeTarget()},isAttacking:function(){return this.attackingMode},getOrientationTo:function(a){return this.gridX<a.gridX?Types.Orientations.RIGHT:this.gridX>a.gridX?Types.Orientations.LEFT:this.gridY>a.gridY?Types.Orientations.UP:Types.Orientations.DOWN},isAttackedBy:function(a){return a.id in this.attackers},addAttacker:function(a){this.isAttackedBy(a)?log.error(this.id+" is already attacked by "+a.id):this.attackers[a.id]=a},removeAttacker:function(a){this.isAttackedBy(a)?delete this.attackers[a.id]:log.error(this.id+" is not attacked by "+a.id)},forEachAttacker:function(a){_.each(this.attackers,function(b){a(b)})},setTarget:function(a){this.target!==a?(this.hasTarget()&&this.removeTarget(),this.unconfirmedTarget=null,this.target=a):log.debug(a.id+" is already the target of "+this.id)},removeTarget:function(){var a=this;this.target&&(this.target instanceof d&&this.target.removeAttacker(this),this.target=null)},hasTarget:function(){return this.target!==null},waitToAttack:function(a){this.unconfirmedTarget=a},isWaitingToAttack:function(a){return this.unconfirmedTarget===a},canAttack:function(a){return this.canReachTarget()&&this.attackCooldown.isOver(a)?!0:!1},canReachTarget:function(){return this.hasTarget()&&this.isAdjacentNonDiagonal(this.target)?!0:!1},die:function(){this.removeTarget(),this.isDead=!0,this.death_callback&&this.death_callback()},onHasMoved:function(a){this.hasmoved_callback=a},hasMoved:function(){this.setDirty(),this.hasmoved_callback&&this.hasmoved_callback(this)},hurt:function(){var a=this;this.stopHurting(),this.sprite=this.hurtSprite,this.hurting=setTimeout(this.stopHurting.bind(this),75)},stopHurting:function(){this.sprite=this.normalSprite,clearTimeout(this.hurting)},setAttackRate:function(a){this.attackCooldown=new c(a)}});return d}),define("exceptions",[],function(){var a={LootException:Class.extend({init:function(a){this.message=a}})};return a}),define("player",["character","exceptions"],function(a,b){var c=a.extend({MAX_LEVEL:10,init:function(a,b,c){this._super(a,c),this.name=b,this.nameOffsetY=-10,this.spriteName="clotharmor",this.weaponName="sword1",this.isLootMoving=!1,this.isSwitchingWeapon=!0},loot:function(a){if(a){var c,d,e,f;this.currentArmorSprite?f=this.currentArmorSprite.name:f=this.spriteName,a.type==="armor"?(c=Types.getArmorRank(a.kind),d=Types.getArmorRank(Types.getKindFromString(f)),e="You are wearing a better armor"):a.type==="weapon"&&(c=Types.getWeaponRank(a.kind),d=Types.getWeaponRank(Types.getKindFromString(this.weaponName)),e="You are wielding a better weapon");if(c&&d){if(c===d)throw new b.LootException("You already have this "+a.type);if(c<=d)throw new b.LootException(e)}log.info("Player "+this.id+" has looted "+a.id),Types.isArmor(a.kind)&&this.invincible&&this.stopInvincibility(),a.onLoot(this)}},isMovingToLoot:function(){return this.isLootMoving},getSpriteName:function(){return this.spriteName},setSpriteName:function(a){this.spriteName=a},getArmorName:function(){var a=this.getArmorSprite();return a.id},getArmorSprite:function(){return this.invincible?this.currentArmorSprite:this.sprite},getWeaponName:function(){return this.weaponName},setWeaponName:function(a){this.weaponName=a},hasWeapon:function(){return this.weaponName!==null},switchWeapon:function(a){var b=14,c=!1,d=this,e=function(){c=!c;return c};if(a!==this.getWeaponName()){this.isSwitchingWeapon&&clearInterval(f),this.switchingWeapon=!0;var f=setInterval(function(){e()?d.setWeaponName(a):d.setWeaponName(null),b-=1,b===1&&(clearInterval(f),d.switchingWeapon=!1,d.switch_callback&&d.switch_callback())},90)}},switchArmor:function(a){var b=14,c=!1,d=this,e=function(){c=!c;return c};if(a&&a.id!==this.getSpriteName()){this.isSwitchingArmor&&clearInterval(f),this.isSwitchingArmor=!0,d.setSprite(a),d.setSpriteName(a.id);var f=setInterval(function(){d.setVisible(e()),b-=1,b===1&&(clearInterval(f),d.isSwitchingArmor=!1,d.switch_callback&&d.switch_callback())},90)}},onArmorLoot:function(a){this.armorloot_callback=a},onSwitchItem:function(a){this.switch_callback=a},onInvincible:function(a){this.invincible_callback=a},startInvincibility:function(){var a=this;this.invincible?this.invincibleTimeout&&clearTimeout(this.invincibleTimeout):(this.currentArmorSprite=this.getSprite(),this.invincible=!0,this.invincible_callback()),this.invincibleTimeout=setTimeout(function(){a.stopInvincibility(),a.idle()},15e3)},stopInvincibility:function(){this.invincible_callback(),this.invincible=!1,this.currentArmorSprite&&(this.setSprite(this.currentArmorSprite),this.setSpriteName(this.currentArmorSprite.id),this.currentArmorSprite=null),this.invincibleTimeout&&clearTimeout(this.invincibleTimeout)}});return c}),define("renderer",["camera","item","character","player","timer"],function(a,b,c,d,e){var f=Class.extend({init:function(a,b,c,d){this.game=a,this.context=b&&b.getContext?b.getContext("2d"):null,this.background=c&&c.getContext?c.getContext("2d"):null,this.foreground=d&&d.getContext?d.getContext("2d"):null,this.canvas=b,this.backcanvas=c,this.forecanvas=d,this.initFPS(),this.tilesize=16,this.upscaledRendering=this.context.mozImageSmoothingEnabled!==undefined,this.supportsSilhouettes=this.upscaledRendering,this.rescale(this.getScaleFactor()),this.lastTime=new Date,this.frameCount=0,this.maxFPS=this.FPS,this.realFPS=0,this.isDebugInfoVisible=!1,this.animatedTileCount=0,this.highTileCount=0,this.tablet=Detect.isTablet(window.innerWidth),this.fixFlickeringTimer=new e(100)},getWidth:function(){return this.canvas.width},getHeight:function(){return this.canvas.height},setTileset:function(a){this.tileset=a},getScaleFactor:function(){var a=window.innerWidth,b=window.innerHeight,c;this.mobile=!1,a<=1e3?(c=2,this.mobile=!0):a<=1500||b<=870?c=2:c=3;return c},rescale:function(a){this.scale=this.getScaleFactor(),this.createCamera(),this.context.mozImageSmoothingEnabled=!1,this.background.mozImageSmoothingEnabled=!1,this.foreground.mozImageSmoothingEnabled=!1,this.initFont(),this.initFPS(),!this.upscaledRendering&&this.game.map&&this.game.map.tilesets&&this.setTileset(this.game.map.tilesets[this.scale-1]),this.game.renderer&&this.game.setSpriteScale(this.scale)},createCamera:function(){this.camera=new a(this),this.camera.rescale(),this.canvas.width=this.camera.gridW*this.tilesize*this.scale,this.canvas.height=this.camera.gridH*this.tilesize*this.scale,log.debug("#entities set to "+this.canvas.width+" x "+this.canvas.height),this.backcanvas.width=this.canvas.width,this.backcanvas.height=this.canvas.height,log.debug("#background set to "+this.backcanvas.width+" x "+this.backcanvas.height),this.forecanvas.width=this.canvas.width,this.forecanvas.height=this.canvas.height,log.debug("#foreground set to "+this.forecanvas.width+" x "+this.forecanvas.height)},initFPS:function(){this.FPS=this.mobile?50:50},initFont:function(){var a;switch(this.scale){case 1:a=10;break;case 2:a=Detect.isWindows()?10:13;break;case 3:a=20}this.setFontSize(a)},setFontSize:function(a){var b=a+"px GraphicPixel";this.context.font=b,this.background.font=b},drawText:function(a,b,c,d,e,f){var g=this.context,h;switch(this.scale){case 1:h=3;break;case 2:h=3;break;case 3:h=5}a&&b&&c&&(g.save(),d&&(g.textAlign="center"),g.strokeStyle=f||"#373737",g.lineWidth=h,g.strokeText(a,b,c),g.fillStyle=e||"white",g.fillText(a,b,c),g.restore())},drawCellRect:function(a,b,c){this.context.save(),this.context.lineWidth=2*this.scale,this.context.strokeStyle=c,this.context.translate(a+2,b+2),this.context.strokeRect(0,0,this.tilesize*this.scale-4,this.tilesize*this.scale-4),this.context.restore()},drawCellHighlight:function(a,b,c){var d=this.scale,e=this.tilesize,f=a*e*d,g=b*e*d;this.drawCellRect(f,g,c)},drawTargetCell:function(){var a=this.game.getMouseGridPosition();this.game.targetCellVisible&&(a.x!==this.game.selectedX||a.y!==this.game.selectedY)&&this.drawCellHighlight(a.x,a.y,this.game.targetColor)},drawAttackTargetCell:function(){var a=this.game.getMouseGridPosition(),b=this.game.getEntityAt(a.x,a.y),c=this.scale;b&&this.drawCellRect(b.x*c,b.y*c,"rgba(255, 0, 0, 0.5)")},drawOccupiedCells:function(){var a=this.game.entityGrid;if(a)for(var b=0;b<a.length;b+=1)for(var c=0;c<a[b].length;c+=1)_.isNull(a[b][c])||this.drawCellHighlight(b,c,"rgba(50, 50, 255, 0.5)")},drawPathingCells:function(){var a=this.game.pathingGrid;if(a&&this.game.debugPathing)for(var b=0;b<a.length;b+=1)for(var c=0;c<a[b].length;c+=1)a[b][c]===1&&this.game.camera.isVisiblePosition(c,b)&&this.drawCellHighlight(c,b,"rgba(50, 50, 255, 0.5)")},drawSelectedCell:function(){var a=this.game.cursors.target,b=this.game.targetAnimation,c=this.upscaledRendering?1:this.scale,d=this.upscaledRendering?this.scale:1;if(this.game.selectedCellVisible)if(this.mobile||this.tablet){if(this.game.drawTarget){var e=this.game.selectedX,f=this.game.selectedY;this.drawCellHighlight(this.game.selectedX,this.game.selectedY,"rgb(51, 255, 0)"),this.lastTargetPos={x:e,y:f},this.game.drawTarget=!1}}else if(a&&b){var g=b.currentFrame,h=this.scale,e=g.x*c,f=g.y*c,i=a.width*c,j=a.height*c,k=16,l=this.game.selectedX*k*h,m=this.game.selectedY*k*h,n=i*d,o=j*d;this.context.save(),this.context.translate(l,m),this.context.drawImage(a.image,e,f,i,j,0,0,n,o),this.context.restore()}},clearScaledRect:function(a,b,c,d,e){var f=this.scale;a.clearRect(b*f,c*f,d*f,e*f)},drawCursor:function(){var a=this.game.mouse.x,b=this.game.mouse.y,c=this.scale,d=this.upscaledRendering?1:this.scale;this.context.save(),this.game.currentCursor&&this.game.currentCursor.isLoaded&&this.context.drawImage(this.game.currentCursor.image,0,0,14*d,14*d,a,b,14*c,14*c),this.context.restore()},drawScaledImage:function(a,b,c,d,e,f,g,h){var i=this.upscaledRendering?1:this.scale;_.each(arguments,function(a){if(_.isUndefined(a)||_.isNaN(a)||_.isNull(a)||a<0){log.error("x:"+c+" y:"+d+" w:"+e+" h:"+f+" dx:"+g+" dy:"+h,!0);throw Error("A problem occured when trying to draw on the canvas")}}),a.drawImage(b,c*i,d*i,e*i,f*i,g*this.scale,h*this.scale,e*this.scale,f*this.scale)},drawTile:function(a,b,c,d,e,f){var h=this.upscaledRendering?1:this.scale;b!==-1&&this.drawScaledImage(a,c,g(b+1,d/h)*this.tilesize,Math.floor(b/(d/h))*this.tilesize,this.tilesize,this.tilesize,g(f+1,e)*this.tilesize,Math.floor(f/e)*this.tilesize)},clearTile:function(a,b,c){var d=this.scale,e=this.tilesize,f=g(c+1,b)*e*d,h=Math.floor(c/b)*e*d,i=e*d,j=i;a.clearRect(f,h,j,i)},drawEntity:function(a){var d=a.sprite,e=this.game.shadows.small,f=a.currentAnimation,g=this.upscaledRendering?1:this.scale,h=this.upscaledRendering?this.scale:1;if(f&&d){var i=f.currentFrame,j=this.scale,k=i.x*g,l=i.y*g,m=d.width*g,n=d.height*g,o=d.offsetX*j,p=d.offsetY*j,q=a.x*j,r=a.y*j,s=m*h,t=n*h;a.isFading&&(this.context.save(),this.context.globalAlpha=a.fadingAlpha),!this.mobile&&!this.tablet&&this.drawEntityName(a),this.context.save(),a.flipSpriteX?(this.context.translate(q+this.tilesize*j,r),this.context.scale(-1,1)):a.flipSpriteY?(this.context.translate(q,r+t),this.context.scale(1,-1)):this.context.translate(q,r);if(a.isVisible()){a.hasShadow()&&this.context.drawImage(e.image,0,0,e.width*g,e.height*g,0,a.shadowOffsetY*h,e.width*g*h,e.height*g*h),this.context.drawImage(d.image,k,l,m,n,o,p,s,t);if(a instanceof b&&a.kind!==Types.Entities.CAKE){var u=this.game.sprites.sparks,f=this.game.sparksAnimation,i=f.currentFrame,v=u.width*i.index*g,w=u.height*f.row*g,x=u.width*g,y=u.width*g;this.context.drawImage(u.image,v,w,x,y,u.offsetX*j,u.offsetY*j,x*h,y*h)}}if(a instanceof c&&!a.isDead&&a.hasWeapon()){var z=this.game.sprites[a.getWeaponName()];if(z){var A=z.animationData[f.name],B=i.index<A.length?i.index:i.index%A.length;wx=z.width*B*g,wy=z.height*f.row*g,ww=z.width*g,wh=z.height*g,this.context.drawImage(z.image,wx,wy,ww,wh,z.offsetX*j,z.offsetY*j,ww*h,wh*h)}}this.context.restore(),a.isFading&&this.context.restore()}},drawEntities:function(a){var b=this;this.game.forEachVisibleEntityByDepth(function(c){c.isLoaded&&(a?c.isDirty&&(b.drawEntity(c),c.isDirty=!1,c.oldDirtyRect=c.dirtyRect,c.dirtyRect=null):b.drawEntity(c))})},drawDirtyEntities:function(){this.drawEntities(!0)},clearDirtyRect:function(a){this.context.clearRect(a.x,a.y,a.w,a.h)},clearDirtyRects:function(){var a=this,b=0;this.game.forEachVisibleEntityByDepth(function(c){c.isDirty&&c.oldDirtyRect&&(a.clearDirtyRect(c.oldDirtyRect),b+=1)}),this.game.forEachAnimatedTile(function(c){c.isDirty&&(a.clearDirtyRect(c.dirtyRect),b+=1)});if(this.game.clearTarget&&this.lastTargetPos){var c=this.lastTargetPos;rect=this.getTargetBoundingRect(c.x,c.y),this.clearDirtyRect(rect),this.game.clearTarget=!1,b+=1}!(b>0)},getEntityBoundingRect:function(a){var b={},c=this.scale,e;if(a instanceof d&&a.hasWeapon()){var f=this.game.sprites[a.getWeaponName()];e=f}else e=a.sprite;e&&(b.x=(a.x+e.offsetX-this.camera.x)*c,b.y=(a.y+e.offsetY-this.camera.y)*c,b.w=e.width*c,b.h=e.height*c,b.left=b.x,b.right=b.x+b.w,b.top=b.y,b.bottom=b.y+b.h);return b},getTileBoundingRect:function(a){var b={},c=this.game.map.width,d=this.scale,e=this.tilesize,f=a.index;b.x=(g(f+1,c)*e-this.camera.x)*d,b.y=(Math.floor(f/c)*e-this.camera.y)*d,b.w=e*d,b.h=e*d,b.left=b.x,b.right=b.x+b.w,b.top=b.y,b.bottom=b.y+b.h;return b},getTargetBoundingRect:function(a,b){var c={},d=this.scale,e=this.tilesize,f=a||this.game.selectedX,g=b||this.game.selectedY;c.x=(f*e-this.camera.x)*d,c.y=(g*e-this.camera.y)*d,c.w=e*d,c.h=e*d,c.left=c.x,c.right=c.x+c.w,c.top=c.y,c.bottom=c.y+c.h;return c},isIntersecting:function(a,b){return!(b.left>a.right||b.right<a.left||b.top>a.bottom||b.bottom<a.top)},drawEntityName:function(a){this.context.save();if(a.name&&a instanceof d){var b=a.id===this.game.playerId?"#fcda5c":"white";this.drawText(a.name,(a.x+8)*this.scale,(a.y+a.nameOffsetY)*this.scale,!0,b)}this.context.restore()},drawTerrain:function(){var a=this,b=this.game.map,c=this.tileset.width/b.tilesize;this.game.forEachVisibleTile(function(d,e){!b.isHighTile(d)&&!b.isAnimatedTile(d)&&a.drawTile(a.background,d,a.tileset,c,b.width,e)},1)},drawAnimatedTiles:function(a){var b=this,c=this.game.map,d=this.tileset.width/c.tilesize;this.animatedTileCount=0,this.game.forEachAnimatedTile(function(e){a?e.isDirty&&(b.drawTile(b.context,e.id,b.tileset,d,c.width,e.index),e.isDirty=!1):(b.drawTile(b.context,e.id,b.tileset,d,c.width,e.index),b.animatedTileCount+=1)})},drawDirtyAnimatedTiles:function(){this.drawAnimatedTiles(!0)},drawHighTiles:function(a){var b=this,c=this.game.map,d=this.tileset.width/c.tilesize;this.highTileCount=0,this.game.forEachVisibleTile(function(e,f){c.isHighTile(e)&&(b.drawTile(a,e,b.tileset,d,c.width,f),b.highTileCount+=1)},1)},drawBackground:function(a,b){a.fillStyle=b,a.fillRect(0,0,this.canvas.width,this.canvas.height)},drawFPS:function(){var a=new Date,b=a.getTime()-this.lastTime.getTime();b>=1e3&&(this.realFPS=this.frameCount,this.frameCount=0,this.lastTime=a),this.frameCount++,this.drawText("FPS: "+this.realFPS,30,30,!1)},drawDebugInfo:function(){this.isDebugInfoVisible&&(this.drawFPS(),this.drawText("A: "+this.animatedTileCount,100,30,!1),this.drawText("H: "+this.highTileCount,140,30,!1))},drawCombatInfo:function(){var a=this;switch(this.scale){case 2:this.setFontSize(20);break;case 3:this.setFontSize(30)}this.game.infoManager.forEachInfo(function(b){a.context.save(),a.context.globalAlpha=b.opacity,a.drawText(b.value,(b.x+8)*a.scale,Math.floor(b.y*a.scale),!0,b.fillColor,b.strokeColor),a.context.restore()}),this.initFont()},setCameraView:function(a){a.translate(-this.camera.x*this.scale,-this.camera.y*this.scale)},clearScreen:function(a){a.clearRect(0,0,this.canvas.width,this.canvas.height)},getPlayerImage:function(){var a=document.createElement("canvas"),b=a.getContext("2d"),c=this.upscaledRendering?1:this.scale,d=this.game.player,e=d.getArmorSprite(),f=e.animationData.idle_down,g=f.row,h=e.width*c,i=e.height*c,j=g*i,k=this.game.sprites[this.game.player.getWeaponName()],l=k.width*c,m=k.height*c,n=m*g,o=(k.offsetX-e.offsetX)*c,p=(k.offsetY-e.offsetY)*c,q=this.game.shadows.small,r=q.width*c,s=q.height*c,t=-e.offsetX*c;oy=-e.offsetY*c,a.width=h,a.height=i,b.clearRect(0,0,h,i),b.drawImage(q.image,0,0,r,s,t,oy,r,s),b.drawImage(e.image,0,j,h,i,0,0,h,i),b.drawImage(k.image,0,n,l,m,o,p,l,m);return a.toDataURL("image/png")},renderStaticCanvases:function(){this.background.save(),this.setCameraView(this.background),this.drawTerrain(),this.background.restore();if(this.mobile||this.tablet)this.clearScreen(this.foreground),this.foreground.save(),this.setCameraView(this.foreground),this.drawHighTiles(this.foreground),this.foreground.restore()},renderFrame:function(){this.mobile||this.tablet?this.renderFrameMobile():this.renderFrameDesktop()},renderFrameDesktop:function(){this.clearScreen(this.context),this.context.save(),this.setCameraView(this.context),this.drawAnimatedTiles(),this.game.started&&(this.drawSelectedCell(),this.drawTargetCell()),this.drawPathingCells(),this.drawEntities(),this.drawCombatInfo(),this.drawHighTiles(this.context),this.context.restore(),this.drawCursor(),this.drawDebugInfo()},renderFrameMobile:function(){this.clearDirtyRects(),this.preventFlickeringBug(),this.context.save(),this.setCameraView(this.context),this.drawDirtyAnimatedTiles(),this.drawSelectedCell(),this.drawDirtyEntities(),this.context.restore()},preventFlickeringBug:function(){this.fixFlickeringTimer.isOver(this.game.currentTime)&&(this.background.fillRect(0,0,0,0),this.context.fillRect(0,0,0,0),this.foreground.fillRect(0,0,0,0))}}),g=function(a,b){return a==0?0:a%b==0?b-1:a%b-1};return f}),define("area",[],function(){var a=Class.extend({init:function(a,b,c,d){this.x=a,this.y=b,this.width=c,this.height=d},contains:function(a){return a?a.gridX>=this.x&&a.gridY>=this.y&&a.gridX<this.x+this.width&&a.gridY<this.y+this.height:!1}});return a}),define("map",["jquery","area"],function(a,b){var c=Class.extend({init:function(a,b){this.game=b,this.data=[],this.isLoaded=!1,this.tilesetsLoaded=!1,this.mapLoaded=!1,this.loadMultiTilesheets=a;var c=!1;this._loadMap(c),this._initTilesets()},_checkReady:function(){this.tilesetsLoaded&&this.mapLoaded&&(this.isLoaded=!0,this.ready_func&&this.ready_func())},_loadMap:function(b){var c=this,d="maps/world_client.json";if(b){log.info("Loading map with web worker.");var e=new Worker("js/mapworker.js");e.postMessage(1),e.onmessage=function(a){var b=a.data;c._initMap(b),c.grid=b.grid,c.plateauGrid=b.plateauGrid,c.mapLoaded=!0,c._checkReady()}}else log.info("Loading map via Ajax."),a.get(d,function(a){c._initMap(a),c._generateCollisionGrid(),c._generatePlateauGrid(),c.mapLoaded=!0,c._checkReady()},"json")},_initTilesets:function(){var a,b,c;this.loadMultiTilesheets?this.game.renderer.mobile||this.game.renderer.tablet?(this.tilesetCount=1,b=this._loadTileset("img/2/tilesheet.png")):(this.tilesetCount=2,b=this._loadTileset("img/2/tilesheet.png"),c=this._loadTileset("img/3/tilesheet.png")):(this.tilesetCount=1,a=this._loadTileset("img/1/tilesheet.png")),this.tilesets=[a,b,c]},_initMap:function(a){this.width=a.width,this.height=a.height,this.tilesize=a.tilesize,this.data=a.data,this.blocking=a.blocking||[],this.plateau=a.plateau||[],this.musicAreas=a.musicAreas||[],this.collisions=a.collisions,this.high=a.high,this.animated=a.animated,this.doors=this._getDoors(a),this.checkpoints=this._getCheckpoints(a)},_getDoors:function(a){var b={},c=this;_.each(a.doors,function(a){var d;switch(a.to){case"u":d=Types.Orientations.UP;break;case"d":d=Types.Orientations.DOWN;break;case"l":d=Types.Orientations.LEFT;break;case"r":d=Types.Orientations.RIGHT;break;default:d=Types.Orientations.DOWN}b[c.GridPositionToTileIndex(a.x,a.y)]={x:a.tx,y:a.ty,orientation:d,cameraX:a.tcx,cameraY:a.tcy,portal:a.p===1}});return b},_loadTileset:function(a){var b=this,c=new Image;c.src=a,log.info("Loading tileset: "+a),c.onload=function(){if(c.width%b.tilesize>0)throw Error("Tileset size should be a multiple of "+b.tilesize);log.info("Map tileset loaded."),b.tilesetCount-=1,b.tilesetCount===0&&(log.debug("All map tilesets loaded."),b.tilesetsLoaded=!0,b._checkReady())};return c},ready:function(a){this.ready_func=a},tileIndexToGridPosition:function(a){var b=0,c=0,d=function(a,b){return a==0?0:a%b==0?b-1:a%b-1};a-=1,b=d(a+1,this.width),c=Math.floor(a/this.width);return{x:b,y:c}},GridPositionToTileIndex:function(a,b){return b*this.width+a+1},isColliding:function(a,b){return this.isOutOfBounds(a,b)||!this.grid?!1:this.grid[b][a]===1},isPlateau:function(a,b){return this.isOutOfBounds(a,b)||!this.plateauGrid?!1:this.plateauGrid[b][a]===1},_generateCollisionGrid:function(){var a=0,b=this;this.grid=[];for(var c,d=0;d<this.height;d++){this.grid[d]=[];for(c=0;c<this.width;c++)this.grid[d][c]=0}_.each(this.collisions,function(a){var c=b.tileIndexToGridPosition(a+1);b.grid[c.y][c.x]=1}),_.each(this.blocking,function(a){var c=b.tileIndexToGridPosition(a+1);b.grid[c.y]!==undefined&&(b.grid[c.y][c.x]=1)}),log.info("Collision grid generated.")},_generatePlateauGrid:function(){var a=0;this.plateauGrid=[];for(var b,c=0;c<this.height;c++){this.plateauGrid[c]=[];for(b=0;b<this.width;b++)_.include(this.plateau,a)?this.plateauGrid[c][b]=1:this.plateauGrid[c][b]=0,a+=1}log.info("Plateau grid generated.")},isOutOfBounds:function(a,b){return isInt(a)&&isInt(b)&&(a<0||a>=this.width||b<0||b>=this.height)},isHighTile:function(a){return _.indexOf(this.high,a+1)>=0},isAnimatedTile:function(a){return a+1 in this.animated},getTileAnimationLength:function(a){return this.animated[a+1].l},getTileAnimationDelay:function(a){var b=this.animated[a+1];return b.d?b.d:100},isDoor:function(a,b){return this.doors[this.GridPositionToTileIndex(a,b)]!==undefined},getDoorDestination:function(a,b){return this.doors[this.GridPositionToTileIndex(a,b)]},_getCheckpoints:function(a){var c=[];_.each(a.checkpoints,function(a){var d=new b(a.x,a.y,a.w,a.h);d.id=a.id,c.push(d)});return c},getCurrentCheckpoint:function(a){return _.detect(this.checkpoints,function(b){return b.contains(a)})}});return c}),define("animation",[],function(){var a=Class.extend({init:function(a,b,c,d,e){this.name=a,this.length=b,this.row=c,this.width=d,this.height=e,this.reset()},tick:function(){var a=this.currentFrame.index;a=a<this.length-1?a+1:0;if(this.count>0&&a===0){this.count-=1;if(this.count===0){this.currentFrame.index=0,this.endcount_callback();return}}this.currentFrame.x=this.width*a,this.currentFrame.y=this.height*this.row,this.currentFrame.index=a},setSpeed:function(a){this.speed=a},setCount:function(a,b){this.count=a,this.endcount_callback=b},isTimeToAnimate:function(a){return a-this.lastTime>this.speed},update:function(a){this.lastTime===0&&this.name.substr(0,3)==="atk"&&(this.lastTime=a);if(this.isTimeToAnimate(a)){this.lastTime=a,this.tick();return!0}return!1},reset:function(){this.lastTime=0,this.currentFrame={index:0,x:0,y:this.row*this.height}}});return a}),function(){var a=["Msxml2.XMLHTTP","Microsoft.XMLHTTP","Msxml2.XMLHTTP.4.0"],b=/^\s*<\?xml(\s)+version=[\'\"](\d)*.(\d)*[\'\"](\s)*\?>/im,c=/<body[^>]*>\s*([\s\S]+)\s*<\/body>/im,d=typeof location!="undefined"&&location.href,e=[];define("text",[],function(){var f,g,h;typeof window!="undefined"&&window.navigator&&window.document?g=function(a,b){var c=f.createXhr();c.open("GET",a,!0),c.onreadystatechange=function(){c.readyState===4&&b(c.responseText)},c.send(null)}:typeof process!="undefined"&&process.versions&&process.versions.node?(h=require.nodeRequire("fs"),g=function(a,b){b(h.readFileSync(a,"utf8"))}):typeof Packages!="undefined"&&(g=function(a,b){var c=new java.io.File(a),d=java.lang.System.getProperty("line.separator"),c=new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(c),"utf-8")),e,f,g="";try{e=new java.lang.StringBuffer,(f=c.readLine())&&f.length()&&f.charAt(0)===65279&&(f=f.substring(1));for(e.append(f);(f=c.readLine())!==null;)e.append(d),e.append(f);g=String(e.toString())}finally{c.close()}b(g)});return f={version:"0.26.0",strip:function(a){if(a){var a=a.replace(b,""),d=a.match(c);d&&(a=d[1])}else a="";return a},jsEscape:function(a){return a.replace(/(['\\])/g,"\\$1").replace(/[\f]/g,"\\f").replace(/[\b]/g,"\\b").replace(/[\n]/g,"\\n").replace(/[\t]/g,"\\t").replace(/[\r]/g,"\\r")},createXhr:function(){var b,c,d;if(typeof XMLHttpRequest!="undefined")return new XMLHttpRequest;for(c=0;c<3;c++){d=a[c];try{b=new ActiveXObject(d)}catch(e){}if(b){a=[d];break}}if(!b)throw Error("createXhr(): XMLHttpRequest not available");return b},get:g,parseName:function(a){var b=!1,c=a.indexOf("."),d=a.substring(0,c),a=a.substring(c+1,a.length),c=a.indexOf("!");c!==-1&&(b=a.substring(c+1,a.length),b=b==="strip",a=a.substring(0,c));return{moduleName:d,ext:a,strip:b}},xdRegExp:/^((\w+)\:)?\/\/([^\/\\]+)/,canUseXhr:function(a,b,c,d){var e=f.xdRegExp.exec(a),g;if(!e)return!0;a=e[2],e=e[3],e=e.split(":"),g=e[1],e=e[0];return(!a||a===b)&&(!e||e===c)&&(!g&&!e||g===d)},finishLoad:function(a,b,c,d,g){c=b?f.strip(c):c,g.isBuild&&g.inlineText&&(e[a]=c),d(c)},load:function(a,b,c,e){var g=f.parseName(a),h=g.moduleName+"."+g.ext,i=b.toUrl(h);!d||f.canUseXhr(i)?f.get(i,function(b){f.finishLoad(a,g.strip,b,c,e)}):b([h],function(a){f.finishLoad(g.moduleName+"."+g.ext,g.strip,a,c,e)})},write:function(a,b,c){if(b in e){var d=f.jsEscape(e[b]);c("define('"+a+"!"+b+"', function () { return '"+d+"';});\n")}},writeFile:function(a,b,c,d,e){var b=f.parseName(b),g=b.moduleName+"."+b.ext,h=c.toUrl(b.moduleName+"."+b.ext)+".js";f.load(g,c,function(){f.write(a,g,function(a){d(h,a)},e)},e)}}})}(),define("text!../sprites/agent.json",function(){return'{\r\t"id": "agent",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/arrow.json",function(){return'{\n\t"id": "arrow",\n\t"width": 14,\n\t"height": 14,\n\t"animations": {\n\t\t"idle_down": {\n\t\t\t"length": 1,\n\t\t\t"row": 0\n\t\t}\n\t}\n}\n'}),define("text!../sprites/axe.json",function(){return'{\r\t"id": "axe",\r\t"width": 48,\r\t"height": 48,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -16,\r\t"offset_y": -20\r}\r'}),define("text!../sprites/bat.json",function(){return'{\r\t"id": "bat",\r\t"width": 32,\r\t"height": 48,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -24\r}\r'}),define("text!../sprites/beachnpc.json",function(){return'{\r\t"id": "beachnpc",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/bluesword.json",function(){return'{\r\t"id": "bluesword",\r\t"width": 48,\r\t"height": 48,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -16,\r\t"offset_y": -20\r}\r'}),define("text!../sprites/boss.json",function(){return'{\r\t"id": "boss",\r\t"width": 64,\r\t"height": 72,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 3,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 6,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 8\r\t\t},\r\t\t"Group 5": {\r\t\t\t"length": 3,\r\t\t\t"row": 9\r\t\t}\r\t},\r\t"offset_x": -24,\r\t"offset_y": -36\r}\r'}),define("text!../sprites/chest.json",function(){return'{\r\t"id": "chest",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 1,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/clotharmor.json",function(){return'{\r\t"id": "clotharmor",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/coder.json",function(){return'{\r\t"id": "coder",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -7\r}\r'}),define("text!../sprites/crab.json",function(){return'{\r\t"id": "crab",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"death": {\r\t\t\t"length": 8,\r\t\t\t"row": 0\r\t\t},\r\t\t"atk_right": {\r\t\t\t"length": 7,\r\t\t\t"row": 1\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 6,\r\t\t\t"row": 2\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 3\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 8,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 5\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 6,\r\t\t\t"row": 6\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 8,\r\t\t\t"row": 7\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 6,\r\t\t\t"row": 8\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 7,\r\t\t\t"row": 9\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/death.json",function(){return'{\r\t"id": "death",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"death": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -4\r}\r'}),define("text!../sprites/deathknight.json",function(){return'{\r\t"id": "deathknight",\r\t"width": 42,\r\t"height": 42,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -13,\r\t"offset_y": -17\r}\r'}),define("text!../sprites/desertnpc.json",function(){return'{\r\t"id": "desertnpc",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/eye.json",function(){return'{\r\t"id": "eye",\r\t"width": 40,\r\t"height": 48,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 14,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 14,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 8,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 14,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -12,\r\t"offset_y": -18\r}\r'}),define("text!../sprites/firefox.json",function(){return'{\r\t"id": "firefox",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 8,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/forestnpc.json",function(){return'{\r\t"id": "forestnpc",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/goblin.json",function(){return'{\r\t"id": "goblin",\r\t"width": 26,\r\t"height": 26,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 3,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 3,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 3,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 3,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -5,\r\t"offset_y": -9\r}\r'}),define("text!../sprites/goldenarmor.json",function(){return'{\r\t"id": "goldenarmor",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/goldensword.json",function(){return'{\r\t"id": "goldensword",\r\t"width": 48,\r\t"height": 48,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -16,\r\t"offset_y": -20\r}\r'}),define("text!../sprites/guard.json",function(){return'{\r\t"id": "guard",\r\t"width": 25,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -5,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/hand.json",function(){return'{\r\t"id": "hand",\r\t"width": 14,\r\t"height": 14,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 1,\r\t\t\t"row": 0\r\t\t}\r\t}\r}\r'}),define("text!../sprites/impact.json",function(){return'{\r\t"id": "impact",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 1,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-axe.json",function(){return'{\r\t"id": "item-axe",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-bluesword.json",function(){return'{\r\t"id": "item-bluesword",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-burger.json",function(){return'{\r\t"id": "item-burger",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-cake.json",function(){return'{\r\t"id": "item-cake",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 3,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -6\r}\r'}),define("text!../sprites/item-firepotion.json",function(){return'{\r\t"id": "item-firepotion",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-flask.json",function(){return'{\r\t"id": "item-flask",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-goldenarmor.json",function(){return'{\r\t"id": "item-goldenarmor",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-goldensword.json",function(){return'{\r\t"id": "item-goldensword",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-leatherarmor.json",function(){return'{\r\t"id": "item-leatherarmor",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-mailarmor.json",function(){return'{\r\t"id": "item-mailarmor",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-morningstar.json",function(){return'{\r\t"id": "item-morningstar",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-platearmor.json",function(){return'{\r\t"id": "item-platearmor",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-redarmor.json",function(){return'{\r\t"id": "item-redarmor",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-redsword.json",function(){return'{\r\t"id": "item-redsword",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-sword1.json",function(){return'{\r\t"id": "item-sword1",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/item-sword2.json",function(){return'{\r\t"id": "item-sword2",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/king.json",function(){return'{\r\t"id": "king",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/lavanpc.json",function(){return'{\r\t"id": "lavanpc",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/leatherarmor.json",function(){return'{\r\t"id": "leatherarmor",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/loot.json",function(){return'{\r\t"id": "loot",\r\t"width": 14,\r\t"height": 14,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 1,\r\t\t\t"row": 0\r\t\t}\r\t}\r}\r'}),define("text!../sprites/mailarmor.json",function(){return'{\r\t"id": "mailarmor",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/morningstar.json",function(){return'{\r\t"id": "morningstar",\r\t"width": 38,\r\t"height": 38,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -11,\r\t"offset_y": -15\r}\r'}),define("text!../sprites/nyan.json",function(){return'{\r\t"id": "nyan",\r\t"width": 49,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -22,\r\t"offset_y": -6\r}\r'}),define("text!../sprites/octocat.json",function(){return'{\r\t"id": "octocat",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/ogre.json",function(){return'{\r\t"id": "ogre",\r\t"width": 48,\r\t"height": 48,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 3,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 6,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 3,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 3,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 6,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -16,\r\t"offset_y": -24\r}\r'}),define("text!../sprites/platearmor.json",function(){return'{\r\t"id": "platearmor",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/priest.json",function(){return'{\r\t"id": "priest",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/rat.json",function(){return'{\r\t"id": "rat",\r\t"width": 48,\r\t"height": 48,\r\t"animations": {\r\t\t"death": {\r\t\t\t"length": 4,\r\t\t\t"row": 0\r\t\t},\r\t\t"atk_right": {\r\t\t\t"length": 6,\r\t\t\t"row": 1\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 3,\r\t\t\t"row": 2\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 3\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 5\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 6\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 8\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 9\r\t\t}\r\t}\r}\r'}),define("text!../sprites/redarmor.json",function(){return'{\r\t"id": "redarmor",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/redsword.json",function(){return'{\r\t"id": "redsword",\r\t"width": 48,\r\t"height": 48,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -16,\r\t"offset_y": -20\r}\r'}),define("text!../sprites/rick.json",function(){return'{\r\t"id": "rick",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/scientist.json",function(){return'{\r\t"id": "scientist",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/shadow16.json",function(){return'{\r\t"id": "shadow16",\r\t"width": 16,\r\t"height": 16\r}\r'}),define("text!../sprites/skeleton.json",function(){return'{\r\t"id": "skeleton",\r\t"width": 48,\r\t"height": 48,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 3,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 3,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 3,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 3,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 3,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -16,\r\t"offset_y": -20\r}\r'}),define("text!../sprites/skeleton2.json",function(){return'{\r\t"id": "skeleton2",\r\t"width": 48,\r\t"height": 48,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 3,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 3,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 3,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 3,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -16,\r\t"offset_y": -20\r}\r'}),define("text!../sprites/snake.json",function(){return'{\r\t"id": "snake",\r\t"width": 28,\r\t"height": 28,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 6,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -6,\r\t"offset_y": -10\r}\r'}),define("text!../sprites/sorcerer.json",function(){return'{\r\t"id": "sorcerer",\r\t"width": 26,\r\t"height": 26,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -5,\r\t"offset_y": -9\r}\r'}),define("text!../sprites/sparks.json",function(){return'{\r\t"id": "sparks",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"idle": {\r\t\t\t"length": 6,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": 0,\r\t"offset_y": 0\r}\r'}),define("text!../sprites/spectre.json",function(){return'{\r\t"id": "spectre",\r\t"width": 34,\r\t"height": 34,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 8,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 6,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 8,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 8,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 6,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -9,\r\t"offset_y": -13\r}\r'}),define("text!../sprites/sword.json",function(){return'{\r\t"id": "sword",\r\t"width": 14,\r\t"height": 14,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 1,\r\t\t\t"row": 0\r\t\t}\r\t}\r}\r'}),define("text!../sprites/sword1.json",function(){return'{\r\t"id": "sword1",\r\t"width": 32,\r\t"height": 32,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -8,\r\t"offset_y": -12\r}\r'}),define("text!../sprites/sword2.json",function(){return'{\r\t"id": "sword2",\r\t"width": 48,\r\t"height": 48,\r\t"animations": {\r\t\t"atk_right": {\r\t\t\t"length": 5,\r\t\t\t"row": 0\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 2,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 5,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 2,\r\t\t\t"row": 5\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 5,\r\t\t\t"row": 6\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 8\r\t\t}\r\t},\r\t"offset_x": -16,\r\t"offset_y": -20\r}\r'}),define("text!../sprites/talk.json",function(){return'{\r\t"id": "talk",\r\t"width": 14,\r\t"height": 14,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 1,\r\t\t\t"row": 0\r\t\t}\r\t}\r}\r'}),define("text!../sprites/target.json",function(){return'{\r\t"id": "target",\r\t"width": 16,\r\t"height": 16,\r\t"animations": {\r\t\t"move": {\r\t\t\t"length": 4,\r\t\t\t"row": 0\r\t\t},\r\t\t"atk": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t}\r\t}\r}\r'}),define("text!../sprites/villagegirl.json",function(){return'{\r\t"id": "villagegirl",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/villager.json",function(){return'{\r\t"id": "villager",\r\t"width": 24,\r\t"height": 24,\r\t"animations": {\r\t\t"idle_down": {\r\t\t\t"length": 2,\r\t\t\t"row": 0\r\t\t}\r\t},\r\t"offset_x": -4,\r\t"offset_y": -8\r}\r'}),define("text!../sprites/wizard.json",function(){return'{\r\t"id": "wizard",\r\t"width": 26,\r\t"height": 26,\r\t"animations": {\r\t\t"death": {\r\t\t\t"length": 3,\r\t\t\t"row": 0\r\t\t},\r\t\t"atk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 1\r\t\t},\r\t\t"atk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 2\r\t\t},\r\t\t"atk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 3\r\t\t},\r\t\t"walk_right": {\r\t\t\t"length": 4,\r\t\t\t"row": 4\r\t\t},\r\t\t"walk_up": {\r\t\t\t"length": 4,\r\t\t\t"row": 5\r\t\t},\r\t\t"walk_down": {\r\t\t\t"length": 4,\r\t\t\t"row": 6\r\t\t},\r\t\t"idle_right": {\r\t\t\t"length": 6,\r\t\t\t"row": 7\r\t\t},\r\t\t"idle_up": {\r\t\t\t"length": 6,\r\t\t\t"row": 8\r\t\t},\r\t\t"idle_down": {\r\t\t\t"length": 6,\r\t\t\t"row": 9\r\t\t}\r\t},\r\t"offset_x": -5,\r\t"offset_y": -9\r}\r'}),define("sprites",["text!../sprites/agent.json","text!../sprites/arrow.json","text!../sprites/axe.json","text!../sprites/bat.json","text!../sprites/beachnpc.json","text!../sprites/bluesword.json","text!../sprites/boss.json","text!../sprites/chest.json","text!../sprites/clotharmor.json","text!../sprites/coder.json","text!../sprites/crab.json","text!../sprites/death.json","text!../sprites/deathknight.json","text!../sprites/desertnpc.json","text!../sprites/eye.json","text!../sprites/firefox.json","text!../sprites/forestnpc.json","text!../sprites/goblin.json","text!../sprites/goldenarmor.json","text!../sprites/goldensword.json","text!../sprites/guard.json","text!../sprites/hand.json","text!../sprites/impact.json","text!../sprites/item-axe.json","text!../sprites/item-bluesword.json","text!../sprites/item-burger.json","text!../sprites/item-cake.json","text!../sprites/item-firepotion.json","text!../sprites/item-flask.json","text!../sprites/item-goldenarmor.json","text!../sprites/item-goldensword.json","text!../sprites/item-leatherarmor.json","text!../sprites/item-mailarmor.json","text!../sprites/item-morningstar.json","text!../sprites/item-platearmor.json","text!../sprites/item-redarmor.json","text!../sprites/item-redsword.json","text!../sprites/item-sword1.json","text!../sprites/item-sword2.json","text!../sprites/king.json","text!../sprites/lavanpc.json","text!../sprites/leatherarmor.json","text!../sprites/loot.json","text!../sprites/mailarmor.json","text!../sprites/morningstar.json","text!../sprites/nyan.json","text!../sprites/octocat.json","text!../sprites/ogre.json","text!../sprites/platearmor.json","text!../sprites/priest.json","text!../sprites/rat.json","text!../sprites/redarmor.json","text!../sprites/redsword.json","text!../sprites/rick.json","text!../sprites/scientist.json","text!../sprites/shadow16.json","text!../sprites/skeleton.json","text!../sprites/skeleton2.json","text!../sprites/snake.json","text!../sprites/sorcerer.json","text!../sprites/sparks.json","text!../sprites/spectre.json","text!../sprites/sword.json","text!../sprites/sword1.json","text!../sprites/sword2.json","text!../sprites/talk.json","text!../sprites/target.json","text!../sprites/villagegirl.json","text!../sprites/villager.json","text!../sprites/wizard.json"],function(){var a={};_.each(arguments,function(b){var c=JSON.parse(b);a[c.id]=c});return a}),define("sprite",["jquery","animation","sprites"],function(a,b,c){var d=Class.extend({init:function(a,b){this.name=a,this.scale=b,this.isLoaded=!1,this.offsetX=0,this.offsetY=0,this.loadJSON(c[a])},loadJSON:function(a){this.id=a.id,this.filepath="img/"+this.scale+"/"+this.id+".png",this.animationData=a.animations,this.width=a.width,this.height=a.height,this.offsetX=a.offset_x!==undefined?a.offset_x:-16,this.offsetY=a.offset_y!==undefined?a.offset_y:-16,this.load()},load:function(){var a=this;this.image=new Image,this.image.src=this.filepath,this.image.onload=function(){a.isLoaded=!0,a.onload_func&&a.onload_func()}},createAnimations:function(){var a={};for(var c in this.animationData){var d=this.animationData[c];a[c]=new b(c,d.length,d.row,this.width,this.height)}return a},createHurtSprite:function(){var a=document.createElement("canvas"),b=a.getContext("2d"),c=this.image.width,d=this.image.height,e,f;a.width=c,a.height=d,b.drawImage(this.image,0,0,c,d);try{e=b.getImageData(0,0,c,d),f=e.data;for(var g=0;g<f.length;g+=4)f[g]=255,f[g+1]=f[g+2]=75;e.data=f,b.putImageData(e,0,0),this.whiteSprite={image:a,isLoaded:!0,offsetX:this.offsetX,offsetY:this.offsetY,width:this.width,height:this.height}}catch(h){log.error("Error getting image data for sprite : "+this.name)}},getHurtSprite:function(){return this.whiteSprite},createSilhouette:function(){var a=document.createElement("canvas"),b=a.getContext("2d"),c=this.image.width,d=this.image.height,e,f,g;a.width=c,a.height=d,b.drawImage(this.image,0,0,c,d),g=b.getImageData(0,0,c,d).data,f=b.getImageData(0,0,c,d),fdata=f.data;var h=function(a,b){return(c*(b-1)+a-1)*4},i=function(a){var b,d;a=a/4+1,b=a%c,d=(a-b)/c+1;return{x:b,y:d}},j=function(a){var b=i(a);return b.x<c&&!k(h(b.x+1,b.y))?!0:b.x>1&&!k(h(b.x-1,b.y))?!0:b.y<d&&!k(h(b.x,b.y+1))?!0:b.y>1&&!k(h(b.x,b.y-1))?!0:!1},k=function(a){return a<0||a>=g.length?!0:g[a]===0&&g[a+1]===0&&g[a+2]===0&&g[a+3]===0};for(var l=0;l<g.length;l+=4)k(l)&&j(l)&&(fdata[l]=fdata[l+1]=255,fdata[l+2]=150,fdata[l+3]=150);f.data=fdata,b.putImageData(f,0,0),this.silhouetteSprite={image:a,isLoaded:!0,offsetX:this.offsetX,offsetY:this.offsetY,width:this.width,height:this.height}}});return d}),define("tile",[],function(){var a=Class.extend({}),b=a.extend({init:function(a,b,c,d){this.startId=a,this.id=a,this.length=b,this.speed=c,this.index=d,this.lastTime=0},tick:function(){this.id-this.startId<this.length-1?this.id+=1:this.id=this.startId},animate:function(a){if(a-this.lastTime>this.speed){this.tick(),this.lastTime=a;return!0}return!1}});return b}),define("warrior",["player"],function(a){var b=a.extend({init:function(a,b){this._super(a,b,Types.Entities.WARRIOR)}});return b}),define("mob",["character"],function(a){var b=a.extend({init:function(a,b){this._super(a,b),this.aggroRange=1,this.isAggressive=!0}});return b}),define("mobs",["mob","timer"],function(a,b){var c={Rat:a.extend({init:function(a){this._super(a,Types.Entities.RAT),this.moveSpeed=350,this.idleSpeed=700,this.shadowOffsetY=-2,this.isAggressive=!1}}),Skeleton:a.extend({init:function(a){this._super(a,Types.Entities.SKELETON),this.moveSpeed=350,this.atkSpeed=100,this.idleSpeed=800,this.shadowOffsetY=1,this.setAttackRate(1300)}}),Skeleton2:a.extend({init:function(a){this._super(a,Types.Entities.SKELETON2),this.moveSpeed=200,this.atkSpeed=100,this.idleSpeed=800,this.walkSpeed=200,this.shadowOffsetY=1,this.setAttackRate(1300)}}),Spectre:a.extend({init:function(a){this._super(a,Types.Entities.SPECTRE),this.moveSpeed=150,this.atkSpeed=50,this.idleSpeed=200,this.walkSpeed=200,this.shadowOffsetY=1,this.setAttackRate(900)}}),Deathknight:a.extend({init:function(a){this._super(a,Types.Entities.DEATHKNIGHT),this.atkSpeed=50,this.moveSpeed=220,this.walkSpeed=100,this.idleSpeed=450,this.setAttackRate(800),this.aggroRange=3},idle:function(a){this.hasTarget()?this._super(a):this._super(Types.Orientations.DOWN)}}),Goblin:a.extend({init:function(a){this._super(a,Types.Entities.GOBLIN),this.moveSpeed=150,this.atkSpeed=60,this.idleSpeed=600,this.setAttackRate(700)}}),Ogre:a.extend({init:function(a){this._super(a,Types.Entities.OGRE),this.moveSpeed=300,this.atkSpeed=100,this.idleSpeed=600}}),Crab:a.extend({init:function(a){this._super(a,Types.Entities.CRAB),this.moveSpeed=200,this.atkSpeed=40,this.idleSpeed=500}}),Snake:a.extend({init:function(a){this._super(a,Types.Entities.SNAKE),this.moveSpeed=200,this.atkSpeed=40,this.idleSpeed=250,this.walkSpeed=100,this.shadowOffsetY=-4}}),Eye:a.extend({init:function(a){this._super(a,Types.Entities.EYE),this.moveSpeed=200,this.atkSpeed=40,this.idleSpeed=50}}),Bat:a.extend({init:function(a){this._super(a,Types.Entities.BAT),this.moveSpeed=120,this.atkSpeed=90,this.idleSpeed=90,this.walkSpeed=85,this.isAggressive=!1}}),Wizard:a.extend({init:function(a){this._super(a,Types.Entities.WIZARD),this.moveSpeed=200,this.atkSpeed=100,this.idleSpeed=150}}),Boss:a.extend({init:function(a){this._super(a,Types.Entities.BOSS),this.moveSpeed=300,this.atkSpeed=50,this.idleSpeed=400,this.atkRate=2e3,this.attackCooldown=new b(this.atkRate),this.aggroRange=3},idle:function(a){this.hasTarget()?this._super(a):this._super(Types.Orientations.DOWN)}})};return c}),define("items",["item"],function(a){var b={Sword2:a.extend({init:function(a){this._super(a,Types.Entities.SWORD2,"weapon"),this.lootMessage="You pick up a steel sword"}}),Axe:a.extend({init:function(a){this._super(a,Types.Entities.AXE,"weapon"),this.lootMessage="You pick up an axe"}}),RedSword:a.extend({init:function(a){this._super(a,Types.Entities.REDSWORD,"weapon"),this.lootMessage="You pick up a blazing sword"}}),BlueSword:a.extend({init:function(a){this._super(a,Types.Entities.BLUESWORD,"weapon"),this.lootMessage="You pick up a magic sword"}}),GoldenSword:a.extend({init:function(a){this._super(a,Types.Entities.GOLDENSWORD,"weapon"),this.lootMessage="You pick up the ultimate sword"}}),MorningStar:a.extend({init:function(a){this._super(a,Types.Entities.MORNINGSTAR,"weapon"),this.lootMessage="You pick up a morning star"}}),LeatherArmor:a.extend({init:function(a){this._super(a,Types.Entities.LEATHERARMOR,"armor"),this.lootMessage="You equip a leather armor"}}),MailArmor:a.extend({init:function(a){this._super(a,Types.Entities.MAILARMOR,"armor"),this.lootMessage="You equip a mail armor"}}),PlateArmor:a.extend({init:function(a){this._super(a,Types.Entities.PLATEARMOR,"armor"),this.lootMessage="You equip a plate armor"}}),RedArmor:a.extend({init:function(a){this._super(a,Types.Entities.REDARMOR,"armor"),this.lootMessage="You equip a ruby armor"}}),GoldenArmor:a.extend({init:function(a){this._super(a,Types.Entities.GOLDENARMOR,"armor"),this.lootMessage="You equip a golden armor"}}),Flask:a.extend({init:function(a){this._super(a,Types.Entities.FLASK,"object"),this.lootMessage="You drink a health potion"}}),Cake:a.extend({init:function(a){this._super(a,Types.Entities.CAKE,"object"),this.lootMessage="You eat a cake"}}),Burger:a.extend({init:function(a){this._super(a,Types.Entities.BURGER,"object"),this.lootMessage="You can haz rat burger"}}),FirePotion:a.extend({init:function(a){this._super(a,Types.Entities.FIREPOTION,"object"),this.lootMessage="You feel the power of Firefox!"},onLoot:function(a){a.startInvincibility()}})};return b}),define("npc",["character"],function(a){var b={guard:["Hello there","We don't need to see your identification","You are not the player we're looking for","Move along, move along..."],king:["Hi, I'm the King","I run this place","Like a boss","I talk to people","Like a boss","I wear a crown","Like a boss","I do nothing all day","Like a boss","Now leave me alone","Like a boss"],villagegirl:["Hi there, adventurer!","How do you like this game?","It's all happening in a single web page! Isn't it crazy?","It's all made possible thanks to WebSockets.","I don't know much about it, after all I'm just a program.",'Why don&#x27;t you read this <a target="_blank" href="http://hacks.mozilla.org/2012/03/browserquest/">blog post</a> and learn all about it?'],villager:["Howdy stranger. Do you like poetry?","Roses are red, violets are blue...","I like hunting rats, and so do you...","The rats are dead, now what to do?","To be honest, I have no clue.","Maybe the forest, could interest you...","or instead, cook a rat stew."],agent:["Do not try to bend the sword","That's impossible","Instead, only try to realize the truth...","There is no sword."],rick:["We're no strangers to love","You know the rules and so do I","A full commitment's what I'm thinking of","You wouldn't get this from any other guy","I just wanna tell you how I'm feeling","Gotta make you understand","Never gonna give you up","Never gonna let you down","Never gonna run around and desert you","Never gonna make you cry","Never gonna say goodbye","Never gonna tell a lie and hurt you"],scientist:["Greetings.","I am the inventor of these two potions.","The red one will replenish your health points...","The orange one will turn you into a firefox and make you invincible...","But it only lasts for a short while.","So make good use of it!","Now if you'll excuse me, I need to get back to my experiments..."],nyan:["nyan nyan nyan nyan nyan","nyan nyan nyan nyan nyan nyan nyan","nyan nyan nyan nyan nyan nyan","nyan nyan nyan nyan nyan nyan nyan nyan"],beachnpc:["lorem ipsum dolor sit amet","consectetur adipisicing elit, sed do eiusmod tempor"],forestnpc:["lorem ipsum dolor sit amet","consectetur adipisicing elit, sed do eiusmod tempor"],desertnpc:["lorem ipsum dolor sit amet","consectetur adipisicing elit, sed do eiusmod tempor"],lavanpc:["lorem ipsum dolor sit amet","consectetur adipisicing elit, sed do eiusmod tempor"],priest:["Oh, hello, young man.","Wisdom is everything, so I'll share a few guidelines with you.","You are free to go wherever you like in this world","but beware of the many foes that await you.","You can find many weapons and armors by killing enemies.","The tougher the enemy, the higher the potential rewards.","You can also unlock achievements by exploring and hunting.","Click on the small cup icon to see a list of all the achievements.","Please stay a while and enjoy the many surprises of BrowserQuest","Farewell, young friend."],sorcerer:["Ah... I had foreseen you would come to see me.","Well? How do you like my new staff?","Pretty cool, eh?","Where did I get it, you ask?","I understand. It's easy to get envious.","I actually crafted it myself, using my mad wizard skills.","But let me tell you one thing...","There are lots of items in this game.","Some more powerful than others.","In order to find them, exploration is key.","Good luck."],octocat:["Welcome to BrowserQuest!","Want to see the source code?",'Check out <a target="_blank" href="http://github.com/mozilla/BrowserQuest">the repository on GitHub</a>'],coder:["Hi! Do you know that you can also play BrowserQuest on your tablet or mobile?","That's the beauty of HTML5!","Give it a try..."],beachnpc:["Don't mind me, I'm just here on vacation.","I have to say...","These giant crabs are somewhat annoying.","Could you please get rid of them for me?"],desertnpc:["One does not simply walk into these mountains...","An ancient undead lord is said to dwell here.","Nobody knows exactly what he looks like...","...for none has lived to tell the tale.","It's not too late to turn around and go home, kid."],othernpc:["lorem ipsum","lorem ipsum"]},c=a.extend({init:function(a,c){this._super(a,c,1),this.itemKind=Types.getKindAsString(this.kind),this.talkCount=b[this.itemKind].length,this.talkIndex=0},talk:function(){var a=null;this.talkIndex>this.talkCount&&(this.talkIndex=0),this.talkIndex<this.talkCount&&(a=b[this.itemKind][this.talkIndex]),this.talkIndex+=1;return a}});return c}),define("npcs",["npc"],function(a){var b={Guard:a.extend({init:function(a){this._super(a,Types.Entities.GUARD,1)}}),King:a.extend({init:function(a){this._super(a,Types.Entities.KING,1)}}),Agent:a.extend({init:function(a){this._super(a,Types.Entities.AGENT,1)}}),Rick:a.extend({init:function(a){this._super(a,Types.Entities.RICK,1)}}),VillageGirl:a.extend({init:function(a){this._super(a,Types.Entities.VILLAGEGIRL,1)}}),Villager:a.extend({init:function(a){this._super(a,Types.Entities.VILLAGER,1)}}),Coder:a.extend({init:function(a){this._super(a,Types.Entities.CODER,1)}}),Scientist:a.extend({init:function(a){this._super(a,Types.Entities.SCIENTIST,1)}}),Nyan:a.extend({init:function(a){this._super(a,Types.Entities.NYAN,1),this.idleSpeed=50}}),Sorcerer:a.extend({init:function(a){this._super(a,Types.Entities.SORCERER,1),this.idleSpeed=150}}),Priest:a.extend({init:function(a){this._super(a,Types.Entities.PRIEST,1)}}),BeachNpc:a.extend({init:function(a){this._super(a,Types.Entities.BEACHNPC,1)}}),ForestNpc:a.extend({init:function(a){this._super(a,Types.Entities.FORESTNPC,1)}}),DesertNpc:a.extend({init:function(a){this._super(a,Types.Entities.DESERTNPC,1)}}),LavaNpc:a.extend({init:function(a){this._super(a,Types.Entities.LAVANPC,1)}}),Octocat:a.extend({init:function(a){this._super(a,Types.Entities.OCTOCAT,1)}})};return b}),define("chest",["entity"],function(a){var b=a.extend({init:function(a,b){this._super(a,Types.Entities.CHEST)},getSpriteName:function(){return"chest"},isMoving:function(){return!1},open:function(){this.open_callback&&this.open_callback()},onOpen:function(a){this.open_callback=a}});return b}),define("entityfactory",["mobs","items","npcs","warrior","chest"],function(a,b,c,d,e){var f={};f.createEntity=function(a,b,c){if(!a)log.error("kind is undefined",!0);else{if(!_.isFunction(f.builders[a]))throw Error(a+" is not a valid Entity type");return f.builders[a](b,c)}},f.builders=[],f.builders[Types.Entities.WARRIOR]=function(a,b){return new d(a,b)},f.builders[Types.Entities.RAT]=function(b){return new a.Rat(b)},f.builders[Types.Entities.SKELETON]=function(b){return new a.Skeleton(b)},f.builders[Types.Entities.SKELETON2]=function(b){return new a.Skeleton2(b)},f.builders[Types.Entities.SPECTRE]=function(b){return new a.Spectre(b)},f.builders[Types.Entities.DEATHKNIGHT]=function(b){return new a.Deathknight(b)},f.builders[Types.Entities.GOBLIN]=function(b){return new a.Goblin(b)},f.builders[Types.Entities.OGRE]=function(b){return new a.Ogre(b)},f.builders[Types.Entities.CRAB]=function(b){return new a.Crab(b)},f.builders[Types.Entities.SNAKE]=function(b){return new a.Snake(b)},f.builders[Types.Entities.EYE]=function(b){return new a.Eye(b)},f.builders[Types.Entities.BAT]=function(b){return new a.Bat(b)},f.builders[Types.Entities.WIZARD]=function(b){return new a.Wizard(b)},f.builders[Types.Entities.BOSS]=function(b){return new a.Boss(b)},f.builders[Types.Entities.SWORD2]=function(a){return new b.Sword2(a)},f.builders[Types.Entities.AXE]=function(a){return new b.Axe(a)},f.builders[Types.Entities.REDSWORD]=function(a){return new b.RedSword(a)},f.builders[Types.Entities.BLUESWORD]=function(a){return new b.BlueSword(a)},f.builders[Types.Entities.GOLDENSWORD]=function(a){return new b.GoldenSword(a)},f.builders[Types.Entities.MORNINGSTAR]=function(a){return new b.MorningStar(a)},f.builders[Types.Entities.MAILARMOR]=function(a){return new b.MailArmor(a)},f.builders[Types.Entities.LEATHERARMOR]=function(a){return new b.LeatherArmor(a)},f.builders[Types.Entities.PLATEARMOR]=function(a){return new b.PlateArmor(a)},f.builders[Types.Entities.REDARMOR]=function(a){return new b.RedArmor(a)},f.builders[Types.Entities.GOLDENARMOR]=function(a){return new b.GoldenArmor(a)},f.builders[Types.Entities.FLASK]=function(a){return new b.Flask(a)},f.builders[Types.Entities.FIREPOTION]=function(a){return new b.FirePotion(a)},f.builders[Types.Entities.BURGER]=function(a){return new b.Burger(a)},f.builders[Types.Entities.CAKE]=function(a){return new b.Cake(a)},f.builders[Types.Entities.CHEST]=function(a){return new e(a)},f.builders[Types.Entities.GUARD]=function(a){return new c.Guard(a)},f.builders[Types.Entities.KING]=function(a){return new c.King(a)},f.builders[Types.Entities.VILLAGEGIRL]=function(a){return new c.VillageGirl(a)},f.builders[Types.Entities.VILLAGER]=function(a){return new c.Villager(a)},f.builders[Types.Entities.CODER]=function(a){return new c.Coder(a)},f.builders[Types.Entities.AGENT]=function(a){return new c.Agent(a)},f.builders[Types.Entities.RICK]=function(a){return new c.Rick(a)},f.builders[Types.Entities.SCIENTIST]=function(a){return new c.Scientist(a)},f.builders[Types.Entities.NYAN]=function(a){return new c.Nyan(a)},f.builders[Types.Entities.PRIEST]=function(a){return new c.Priest(a)},f.builders[Types.Entities.SORCERER]=function(a){return new c.Sorcerer(a)},f.builders[Types.Entities.OCTOCAT]=function(a){return new c.Octocat(a)},f.builders[Types.Entities.BEACHNPC]=function(a){return new c.BeachNpc(a)},f.builders[Types.Entities.FORESTNPC]=function(a){return new c.ForestNpc(a)},f.builders[Types.Entities.DESERTNPC]=function(a){return new c.DesertNpc(a)},f.builders[Types.Entities.LAVANPC]=function(a){return new c.LavaNpc(a)};return f}),function(a){function h(b){var c=0,d=b.length,e=[],f=a,g=null,h=0,i=-1,j=!1,k=!1,l="",m=null,n=0;while(c<d){h=b.charCodeAt(c++),g=e[i];if(j&&k&&h>16)l=b.substring(c,c+h-17),c+=h-17,k=!1;else if(h===8||h===10)m=h===8?[]:new Object,k=j=h===10,f!==a?g instanceof Array?g.push(m):g[l]=m:f=m,e.push(m),i++;else if(h===11||h===9)e.pop(),k=j=!(e[--i]instanceof Array);else if(h>16)h=h-17,h=h>115?0-h+116:h+1,g instanceof Array?g.push(h):g[l]=h,k=!0;else if(h>0&&h<5)((h-1)/2|0)===0?(m=b.charCodeAt(c),c++):(m=(b.charCodeAt(c)<<16)+b.charCodeAt(c+1),c+=2),m=h%2?m+1:0-m,g instanceof Array?g.push(m):g[l]=m,k=!0;else if(h>12&&h<17)((h-13)/2|0)===0?(n=b.charCodeAt(c),n>127?(m=0,n-=128,c++):(m=b.charCodeAt(c+1),c+=2)):(m=(b.charCodeAt(c)<<16)+b.charCodeAt(c+1),n=b.charCodeAt(c+2),c+=3),m=h%2?m+n*.01:0-(m+n*.01),g instanceof Array?g.push(m):g[l]=m,k=!0;else if(h>4&&h<7)g instanceof Array?g.push(h===5):g[l]=h===5,k=!0;else if(h===0)g instanceof Array?g.push(null):g[l]=null,k=!0;else if(h===7){m=0;while(b.charCodeAt(c)===65535)m+=65535,c++;m+=b.charCodeAt(c++),g instanceof Array?g.push(b.substr(c,m)):g[l]=b.substr(c,m),c+=m,k=!0}}return f}function g(a){e="",f(a,!0);return e}function f(a,b){if(typeof a=="number"){var d=a|0;if(d!==a){var g=0,h=(a-d)*100;h<0?(g=(h+1|0)-h,h=g>=1&&g<=1.5?h|0:h-1|0):(g=h|0,h=h-g>=.5?h+1|0:g),g=0,a<0&&(d=0-d,h=0-h,g=1),d<65536?d===0?e+=c[13+g]+c[h+128]:e+=c[13+g]+c[h]+c[d]:e+=c[15+g]+c[d>>16&65535]+c[d&65535]+c[h]}else{var g=0;a<=0?(a=0-a,g=1):a--,a<116?e+=c[17+a+g*116]:a<65536?e+=c[1+g]+c[a]:e+=c[3+g]+c[a>>16&65535]+c[a&65535]}}else if(typeof a=="string"){var i=a.length;e+=c[7];while(i>=65535)i-=65535,e+=c[65535];e+=c[i]+a}else if(a===!0)e+=c[5];else if(a===!1)e+=c[6];else if(a===null)e+=c[0];else if(a instanceof Array){e+=c[8];for(var j=0,i=a.length;j<i;j++)f(a[j],!1);b||(e+=c[9])}else if(a instanceof Object){e+=c[10];for(var k in a)e+=c[17+k.length]+k,f(a[k],!1);b||(e+=c[11])}}var b=String.fromCharCode,c=Array(65536);for(var d=0;d<65536;d++)c[d]=b(d);var e="";typeof window=="undefined"?(exports.encode=g,exports.decode=h):window.BISON={encode:g,decode:h}}(),define("lib/bison",function(){}),define("gameclient",["player","entityfactory","lib/bison"],function(a,b,c){var d=Class.extend({init:function(a,b){this.connection=null,this.host=a,this.port=b,this.connected_callback=null,this.spawn_callback=null,this.movement_callback=null,this.handlers=[],this.handlers[Types.Messages.WELCOME]=this.receiveWelcome,this.handlers[Types.Messages.MOVE]=this.receiveMove,this.handlers[Types.Messages.LOOTMOVE]=this.receiveLootMove,this.handlers[Types.Messages.ATTACK]=this.receiveAttack,this.handlers[Types.Messages.SPAWN]=this.receiveSpawn,this.handlers[Types.Messages.DESPAWN]=this.receiveDespawn,this.handlers[Types.Messages.SPAWN_BATCH]=this.receiveSpawnBatch,this.handlers[Types.Messages.HEALTH]=this.receiveHealth,this.handlers[Types.Messages.CHAT]=this.receiveChat,this.handlers[Types.Messages.EQUIP]=this.receiveEquipItem,this.handlers[Types.Messages.DROP]=this.receiveDrop,this.handlers[Types.Messages.TELEPORT]=this.receiveTeleport,this.handlers[Types.Messages.DAMAGE]=this.receiveDamage,this.handlers[Types.Messages.POPULATION]=this.receivePopulation,this.handlers[Types.Messages.LIST]=this.receiveList,this.handlers[Types.Messages.DESTROY]=this.receiveDestroy,this.handlers[Types.Messages.KILL]=this.receiveKill,this.handlers[Types.Messages.HP]=this.receiveHitPoints,this.handlers[Types.Messages.BLINK]=this.receiveBlink,this.useBison=!1,this.enable()},enable:function(){this.isListening=!0},disable:function(){this.isListening=!1},connect:function(a){var b="ws://"+this.host+":"+this.port+"/",c=this;log.info("Trying to connect to server : "+b),window.MozWebSocket?this.connection=new MozWebSocket(b):this.connection=new WebSocket(b),a?(this.connection.onmessage=function(a){var b=JSON.parse(a.data);b.status==="OK"?c.dispatched_callback(b.host,b.port):b.status==="FULL"?alert("BrowserQuest is currently at maximum player population. Please retry later."):alert("Unknown error while connecting to BrowserQuest.")},this.connection.onclose=function(){log.debug("Connection closed")}):(this.connection.onopen=function(a){log.info("Connected to server "+c.host+":"+c.port)},this.connection.onmessage=function(a){if(a.data==="go")c.connected_callback&&c.connected_callback();else{if(a.data==="timeout"){c.isTimeout=!0;return}c.receiveMessage(a.data)}},this.connection.onerror=function(a){log.error(a,!0)},this.connection.onclose=function(){log.debug("Connection closed"),$("#container").addClass("error"),c.disconnected_callback&&(c.isTimeout?c.disconnected_callback("You have been disconnected for being inactive for too long"):c.disconnected_callback("The connection to BrowserQuest has been lost"))})},sendMessage:function(a){var b;this.useBison?b=c.encode(a):b=JSON.stringify(a),this.connection.send(b)},receiveMessage:function(a){var b,d;this.isListening&&(this.useBison?b=c.decode(a):b=JSON.parse(a),log.debug("data: "+a),b instanceof Array&&(b[0]instanceof Array?this.receiveActionBatch(b):this.receiveAction(b)))},receiveAction:function(a){var b=a[0];this.handlers[b]&&_.isFunction(this.handlers[b])?this.handlers[b].call(this,a):log.error("Unknown action : "+b)},receiveActionBatch:function(a){var b=this;_.each(a,function(a){b.receiveAction(a)})},receiveWelcome:function(a){var b=a[1],c=a[2],d=a[3],e=a[4],f=a[5];this.welcome_callback&&this.welcome_callback(b,c,d,e,f)},receiveMove:function(a){var b=a[1],c=a[2],d=a[3];this.move_callback&&this.move_callback(b,c,d)},receiveLootMove:function(a){var b=a[1],c=a[2];this.lootmove_callback&&this.lootmove_callback(b,c)},receiveAttack:function(a){var b=a[1],c=a[2];this.attack_callback&&this.attack_callback(b,c)},receiveSpawn:function(c){var d=c[1],e=c[2],f=c[3],g=c[4];if(Types.isItem(e)){var h=b.createEntity(e,d);this.spawn_item_callback&&this.spawn_item_callback(h,f,g)}else if(Types.isChest(e)){var h=b.createEntity(e,d);this.spawn_chest_callback&&this.spawn_chest_callback(h,f,g)}else{var i,j,k,l,m;Types.isPlayer(e)?(i=c[5],j=c[6],m=c[7],l=c[8],c.length>9&&(k=c[9])):Types.isMob(e)&&(j=c[5],c.length>6&&(k=c[6]));var n=b.createEntity(e,d,i);n instanceof a&&(n.weaponName=Types.getKindAsString(l),n.spriteName=Types.getKindAsString(m)),this.spawn_character_callback&&this.spawn_character_callback(n,f,g,j,k)}},receiveDespawn:function(a){var b=a[1];this.despawn_callback&&this.despawn_callback(b)},receiveHealth:function(a){var b=a[1],c=!1;a[2]&&(c=!0),this.health_callback&&this.health_callback(b,c)},receiveChat:function(a){var b=a[1],c=a[2];this.chat_callback&&this.chat_callback(b,c)},receiveEquipItem:function(a){var b=a[1],c=a[2];this.equip_callback&&this.equip_callback(b,c)},receiveDrop:function(a){var c=a[1],d=a[2],e=a[3],f=b.createEntity(e,d);f.wasDropped=!0,f.playersInvolved=a[4],this.drop_callback&&this.drop_callback(f,c)},receiveTeleport:function(a){var b=a[1],c=a[2],d=a[3];this.teleport_callback&&this.teleport_callback(b,c,d)},receiveDamage:function(a){var b=a[1],c=a[2];this.dmg_callback&&this.dmg_callback(b,c)},receivePopulation:function(a){var b=a[1],c=a[2];this.population_callback&&this.population_callback(b,c)},receiveKill:function(a){var b=a[1];this.kill_callback&&this.kill_callback(b)},receiveList:function(a){a.shift(),this.list_callback&&this.list_callback(a)},receiveDestroy:function(a){var b=a[1];this.destroy_callback&&this.destroy_callback(b)},receiveHitPoints:function(a){var b=a[1];this.hp_callback&&this.hp_callback(b)},receiveBlink:function(a){var b=a[1];this.blink_callback&&this.blink_callback(b)},onDispatched:function(a){this.dispatched_callback=a},onConnected:function(a){this.connected_callback=a},onDisconnected:function(a){this.disconnected_callback=a},onWelcome:function(a){this.welcome_callback=a},onSpawnCharacter:function(a){this.spawn_character_callback=a},onSpawnItem:function(a){this.spawn_item_callback=a},onSpawnChest:function(a){this.spawn_chest_callback=a},onDespawnEntity:function(a){this.despawn_callback=a},onEntityMove:function(a){this.move_callback=a},onEntityAttack:function(a){this.attack_callback=a},onPlayerChangeHealth:function(a){this.health_callback=a},onPlayerEquipItem:function(a){this.equip_callback=a},onPlayerMoveToItem:function(a){this.lootmove_callback=a},onPlayerTeleport:function(a){this.teleport_callback=a},onChatMessage:function(a){this.chat_callback=a},onDropItem:function(a){this.drop_callback=a},onPlayerDamageMob:function(a){this.dmg_callback=a},onPlayerKillMob:function(a){this.kill_callback=a},onPopulationChange:function(a){this.population_callback=a},onEntityList:function(a){this.list_callback=a},onEntityDestroy:function(a){this.destroy_callback=a},onPlayerChangeMaxHitPoints:function(a){this.hp_callback=a},onItemBlink:function(a){this.blink_callback=a},sendHello:function(a){this.sendMessage([Types.Messages.HELLO,a.name,Types.getKindFromString(a.getSpriteName()),Types.getKindFromString(a.getWeaponName())])},sendMove:function(a,b){this.sendMessage([Types.Messages.MOVE,a,b])},sendLootMove:function(a,b,c){this.sendMessage([Types.Messages.LOOTMOVE,b,c,a.id])},sendAggro:function(a){this.sendMessage([Types.Messages.AGGRO,a.id])},sendAttack:function(a){this.sendMessage([Types.Messages.ATTACK,a.id])},sendHit:function(a){this.sendMessage([Types.Messages.HIT,a.id])},sendHurt:function(a){this.sendMessage([Types.Messages.HURT,a.id])},sendChat:function(a){this.sendMessage([Types.Messages.CHAT,a])},sendLoot:function(a){this.sendMessage([Types.Messages.LOOT,a.id])},sendTeleport:function(a,b){this.sendMessage([Types.Messages.TELEPORT,a,b])},sendWho:function(a){a.unshift(Types.Messages.WHO),this.sendMessage(a)},sendZone:function(){this.sendMessage([Types.Messages.ZONE])},sendOpen:function(a){this.sendMessage([Types.Messages.OPEN,a.id])},sendCheck:function(a){this.sendMessage([Types.Messages.CHECK,a])}});return d}),define("audio",["area"],function(a){var b=Class.extend({init:function(a){var b=this;this.enabled=!0,this.extension=Detect.canPlayMP3()?"mp3":"ogg",this.sounds={},this.game=a,this.currentMusic=null,this.areas=[],this.musicNames=["village","beach","forest","cave","desert","lavaland","boss"],this.soundNames=["loot","hit1","hit2","hurt","heal","chat","revive","death","firefox","achievement","kill1","kill2","noloot","teleport","chest","npc","npc-end"];var c=function(){var a=_.size(b.soundNames);log.info("Loading sound files..."),_.each(b.soundNames,function(c){b.loadSound(c,function(){a-=1,a===0&&(Detect.isSafari()||d())})})},d=function(){b.game.renderer.mobile||(log.info("Loading music files..."),b.loadMusic(b.musicNames.shift(),function(){_.each(b.musicNames,function(a){b.loadMusic(a)})}))};!Detect.isSafari()||!Detect.isWindows()?c():this.enabled=!1},toggle:function(){this.enabled?(this.enabled=!1,this.currentMusic&&this.resetMusic(this.currentMusic)):(this.enabled=!0,this.currentMusic&&(this.currentMusic=null),this.updateMusic())},load:function(a,b,c,d){var e=a+b+"."+this.extension,f=new Media("file:///android_asset/www/"+e,function(){log.debug(e+" is ready to play."),c&&c()},function(a){log.error("Error: "+e+" could not be loaded."),g.sounds[b]=null}),g=this;this.sounds[b]=[f],_.times(d-1,function(){g.sounds[b].push(f)})},loadSound:function(a,b){this.load("audio/sounds/",a,b,4)},loadMusic:function(a,b){this.load("audio/music/",a,b,1);var c=this.sounds[a][0];c.loop=!0},getSound:function(a){if(!this.sounds[a])return null;var b=_.detect(this.sounds[a],function(a){return a.ended||a.paused});b&&b.ended?b.currentTime=0:b=this.sounds[a][0];return b},playSound:function(a){var b=this.enabled&&this.getSound(a);b&&b.play()},addArea:function(b,c,d,e,f){var g=new a(b,c,d,e);g.musicName=f,this.areas.push(g)},getSurroundingMusic:function(a){var b=null,c=_.detect(this.areas,function(b){return b.contains(a)});c&&(b={sound:this.getSound(c.musicName),name:c.musicName});return b},updateMusic:function(){if(this.enabled){var a=this.getSurroundingMusic(this.game.player);a?this.isCurrentMusic(a)||(this.currentMusic&&this.fadeOutCurrentMusic(),this.playMusic(a)):this.fadeOutCurrentMusic()}},isCurrentMusic:function(a){return this.currentMusic&&a.name===this.currentMusic.name},playMusic:function(a){this.enabled&&a&&a.sound&&(a.sound.fadingOut?this.fadeInMusic(a):(a.sound.volume=1,a.sound.play()),this.currentMusic=a)},resetMusic:function(a){a&&a.sound&&a.sound.readyState>0&&(a.sound.pause(),a.sound.currentTime=0)},fadeOutMusic:function(a,b){var c=this;a&&!a.sound.fadingOut&&(this.clearFadeIn(a),a.sound.fadingOut=setInterval(function(){var d=.02;volume=a.sound.volume-d,c.enabled&&volume>=d?a.sound.volume=volume:(a.sound.volume=0,c.clearFadeOut(a),b(a))},50))},fadeInMusic:function(a){var b=this;a&&!a.sound.fadingIn&&(this.clearFadeOut(a),a.sound.fadingIn=setInterval(function(){var c=.01;volume=a.sound.volume+c,b.enabled&&volume<1-c?a.sound.volume=volume:(a.sound.volume=1,b.clearFadeIn(a))},30))},clearFadeOut:function(a){a.sound.fadingOut&&(clearInterval(a.sound.fadingOut),a.sound.fadingOut=null)},clearFadeIn:function(a){a.sound.fadingIn&&(clearInterval(a.sound.fadingIn),a.sound.fadingIn=null)},fadeOutCurrentMusic:function(){var a=this;this.currentMusic&&(this.fadeOutMusic(this.currentMusic,function(b){a.resetMusic(b)}),this.currentMusic=null)}});return b}),define("updater",["character","timer"],function(a,b){var c=Class.extend({init:function(a){this.game=a,this.playerAggroTimer=new b(1e3)},update:function(){this.updateZoning(),this.updateCharacters(),this.updatePlayerAggro(),this.updateTransitions(),this.updateAnimations(),this.updateAnimatedTiles(),this.updateChatBubbles(),this.updateInfos()},updateCharacters:function(){var b=this;this.game.forEachEntity(function(c){var d=c instanceof a;c.isLoaded&&(d&&(b.updateCharacter(c),b.game.onCharacterUpdate(c)),b.updateEntityFading(c))})},updatePlayerAggro:function(){var a=this.game.currentTime,b=this.game.player;b&&!b.isMoving()&&!b.isAttacking()&&this.playerAggroTimer.isOver(a)&&b.checkAggro()},updateEntityFading:function(a){if(a&&a.isFading){var b=1e3,c=this.game.currentTime,d=c-a.startFadingTime;d>b?(this.isFading=!1,a.fadingAlpha=1):a.fadingAlpha=d/b}},updateTransitions:function(){var a=this,b=null,c=this.game.currentZoning;this.game.forEachEntity(function(c){b=c.movement,b&&b.inProgress&&b.step(a.game.currentTime)}),c&&c.inProgress&&c.step(this.game.currentTime)},updateZoning:function(){var a=this.game,b=a.camera,c=a.currentZoning,d=3,e=16,f=500;if(c&&c.inProgress===!1){var g=this.game.zoningOrientation,h=endValue=offset=0,i=null,j=null;if(g===Types.Orientations.LEFT||g===Types.Orientations.RIGHT)offset=(b.gridW-2)*e,h=g===Types.Orientations.LEFT?b.x-e:b.x+e,endValue=g===Types.Orientations.LEFT?b.x-offset:b.x+offset,i=function(c){b.setPosition(c,b.y),a.initAnimatedTiles(),a.renderer.renderStaticCanvases()},j=function(){b.setPosition(c.endValue,b.y),a.endZoning()};else if(g===Types.Orientations.UP||g===Types.Orientations.DOWN)offset=(b.gridH-2)*e,h=g===Types.Orientations.UP?b.y-e:b.y+e,endValue=g===Types.Orientations.UP?b.y-offset:b.y+offset,i=function(c){b.setPosition(b.x,c),a.initAnimatedTiles(),a.renderer.renderStaticCanvases()},j=function(){b.setPosition(b.x,c.endValue),a.endZoning()};c.start(this.game.currentTime,i,j,h,endValue,f)}},updateCharacter:function(a){var b=this,c=Math.round(16/Math.round(a.moveSpeed/(1e3/this.game.renderer.FPS)));a.isMoving()&&a.movement.inProgress===!1&&(a.orientation===Types.Orientations.LEFT?a.movement.start(this.game.currentTime,function(b){a.x=b,a.hasMoved()},function(){a.x=a.movement.endValue,a.hasMoved(),a.nextStep()},a.x-c,a.x-16,a.moveSpeed):a.orientation===Types.Orientations.RIGHT?a.movement.start(this.game.currentTime,function(b){a.x=b,a.hasMoved()},function(){a.x=a.movement.endValue,a.hasMoved(),a.nextStep()},a.x+c,a.x+16,a.moveSpeed):a.orientation===Types.Orientations.UP?a.movement.start(this.game.currentTime,function(b){a.y=b,a.hasMoved()},function(){a.y=a.movement.endValue,a.hasMoved(),a.nextStep()},a.y-c,a.y-16,a.moveSpeed):a.orientation===Types.Orientations.DOWN&&a.movement.start(this.game.currentTime,function(b){a.y=b,a.hasMoved()},function(){a.y=a.movement.endValue,a.hasMoved(),a.nextStep()},a.y+c,a.y+16,a.moveSpeed))},updateAnimations:function(){var a=this.game.currentTime;this.game.forEachEntity(function(b){var c=b.currentAnimation;c&&c.update(a)&&b.setDirty()});var b=this.game.sparksAnimation;b&&b.update(a);var c=this.game.targetAnimation;c&&c.update(a)},updateAnimatedTiles:function(){var a=this,b=this.game.currentTime;this.game.forEachAnimatedTile(function(c){c.animate(b)&&(c.isDirty=!0,c.dirtyRect=a.game.renderer.getTileBoundingRect(c),(a.game.renderer.mobile||a.game.renderer.tablet)&&a.game.checkOtherDirtyRects(c.dirtyRect,c,c.x,c.y))})},updateChatBubbles:function(){var a=this.game.currentTime;this.game.bubbleManager.update(a)},updateInfos:function(){var a=this.game.currentTime;this.game.infoManager.update(a)}});return c}),define("lib/astar",[],function(){var a=function(){function h(h,i,j,k){var l=h[0].length,m=h.length,n=l*m,o=Math.abs,p=Math.max,q={},r=[],s=[{x:i[0],y:i[1],f:0,g:0,v:i[0]+i[1]*l}],t=1,u,v,w,x,y,z,A,B,C;j={x:j[0],y:j[1],v:j[0]+j[1]*l};switch(k){case"Diagonal":w=a;case"DiagonalFree":v=e;break;case"Euclidean":w=a;case"EuclideanFree":p=Math.sqrt,v=f;break;default:v=g,w=c}w||(w=b);do{z=n,A=0;for(x=0;x<t;++x)(k=s[x].f)<z&&(z=k,A=x);B=s.splice(A,1)[0];if(B.v!=j.v){--t,C=d(w,B.x,B.y,h,m,l);for(x=0,y=C.length;x<y;++x)(u=C[x]).p=B,u.f=u.g=0,u.v=u.x+u.y*l,u.v in q||(u.f=(u.g=B.g+v(u,B,o,p))+v(u,j,o,p),s[t++]=u,q[u.v]=1)}else{x=t=0;do r[x++]=[B.x,B.y];while(B=B.p);r.reverse()}}while(t);return r}function g(a,b,c,d){return c(a.x-b.x)+c(a.y-b.y)}function f(a,b,c,d){var e=a.x-b.x,f=a.y-b.y;return d(e*e+f*f)}function e(a,b,c,d){return d(c(a.x-b.x),c(a.y-b.y))}function d(a,b,c,d,e,f){var g=c-1,h=c+1,i=b+1,j=b-1,k=g>-1&&!d[g][b],l=h<e&&!d[h][b],m=i<f&&!d[c][i],n=j>-1&&!d[c][j],o=[],p=0;k&&(o[p++]={x:b,y:g}),m&&(o[p++]={x:i,y:c}),l&&(o[p++]={x:b,y:h}),n&&(o[p++]={x:j,y:c});return a(k,l,m,n,g,h,i,j,d,e,f,o,p)}function c(a,b,c,d,e,f,g,h,i,j,k,l,m){return l}function b(a,b,c,d,e,f,g,h,i,j,k,l,m){a=e>-1,b=f<j,c=g<k,d=h>-1,c&&(a&&!i[e][g]&&(l[m++]={x:g,y:e}),b&&!i[f][g]&&(l[m++]={x:g,y:f})),d&&(a&&!i[e][h]&&(l[m++]={x:h,y:e}),b&&!i[f][h]&&(l[m++]={x:h,y:f}));return l}function a(a,b,c,d,e,f,g,h,i,j,k,l,m){a&&(c&&!i[e][g]&&(l[m++]={x:g,y:e}),d&&!i[e][h]&&(l[m++]={x:h,y:e})),b&&(c&&!i[f][g]&&(l[m++]={x:g,y:f}),d&&!i[f][h]&&(l[m++]={x:h,y:f}));return l}return h}();return a}),define("pathfinder",["lib/astar"],function(a){var b=Class.extend({init:function(a,b){this.width=a,this.height=b,this.grid=null,this.blankGrid=[],this.initBlankGrid_(),this.ignored=[]},initBlankGrid_:function(){for(var a=0;a<this.height;a+=1){this.blankGrid[a]=[];for(var b=0;b<this.width;b+=1)this.blankGrid[a][b]=0}},findPath:function(b,c,d,e,f){var g=[c.gridX,c.gridY],h=[d,e],i;this.grid=b,this.applyIgnoreList_(!0),i=a(this.grid,g,h),i.length===0&&f===!0&&(i=this.findIncompletePath_(g,h));return i},findIncompletePath_:function(b,c){var d,e,f,g=[];d=a(this.blankGrid,b,c);for(var h=d.length-1;h>0;h-=1){e=d[h][0],f=d[h][1];if(this.grid[f][e]===0){g=a(this.grid,b,[e,f]);break}}return g},ignoreEntity:function(a){a&&this.ignored.push(a)},applyIgnoreList_:function(a){var b=this,c,d,e;_.each(this.ignored,function(e){c=e.isMoving()?e.nextGridX:e.gridX,d=e.isMoving()?e.nextGridY:e.gridY,c>=0&&d>=0&&(b.grid[d][c]=a?0:1)})},clearIgnoreList:function(){this.applyIgnoreList_(!1),this.ignored=[]}});return b}),define("text!../config/config_build.json",function(){return'{\n    "host": "178.79.178.215",\n    "port": 80\n}\n'}),define("config",["text!../config/config_build.json"],function(a){var b={dev:{host:"localhost",port:8e3,dispatcher:!1},build:JSON.parse(a)};return b}),Types={Messages:{HELLO:0,WELCOME:1,SPAWN:2,DESPAWN:3,MOVE:4,LOOTMOVE:5,AGGRO:6,ATTACK:7,HIT:8,HURT:9,HEALTH:10,CHAT:11,LOOT:12,EQUIP:13,DROP:14,TELEPORT:15,DAMAGE:16,POPULATION:17,KILL:18,LIST:19,WHO:20,ZONE:21,DESTROY:22,HP:23,BLINK:24,OPEN:25,CHECK:26},Entities:{WARRIOR:1,RAT:2,SKELETON:3,GOBLIN:4,OGRE:5,SPECTRE:6,CRAB:7,BAT:8,WIZARD:9,EYE:10,SNAKE:11,SKELETON2:12,BOSS:13,DEATHKNIGHT:14,FIREFOX:20,CLOTHARMOR:21,LEATHERARMOR:22,MAILARMOR:23,PLATEARMOR:24,REDARMOR:25,GOLDENARMOR:26,FLASK:35,BURGER:36,CHEST:37,FIREPOTION:38,CAKE:39,GUARD:40,KING:41,OCTOCAT:42,VILLAGEGIRL:43,VILLAGER:44,PRIEST:45,SCIENTIST:46,AGENT:47,RICK:48,NYAN:49,SORCERER:50,BEACHNPC:51,FORESTNPC:52,DESERTNPC:53,LAVANPC:54,CODER:55,SWORD1:60,SWORD2:61,REDSWORD:62,GOLDENSWORD:63,MORNINGSTAR:64,AXE:65,BLUESWORD:66},Orientations:{UP:1,DOWN:2,LEFT:3,RIGHT:4}};var kinds={warrior:[Types.Entities.WARRIOR,"player"],rat:[Types.Entities.RAT,"mob"],skeleton:[Types.Entities.SKELETON,"mob"],goblin:[Types.Entities.GOBLIN,"mob"],ogre:[Types.Entities.OGRE,"mob"],spectre:[Types.Entities.SPECTRE,"mob"],deathknight:[Types.Entities.DEATHKNIGHT,"mob"],crab:[Types.Entities.CRAB,"mob"],snake:[Types.Entities.SNAKE,"mob"],bat:[Types.Entities.BAT,"mob"],wizard:[Types.Entities.WIZARD,"mob"],eye:[Types.Entities.EYE,"mob"],skeleton2:[Types.Entities.SKELETON2,"mob"],boss:[Types.Entities.BOSS,"mob"],sword1:[Types.Entities.SWORD1,"weapon"],sword2:[Types.Entities.SWORD2,"weapon"],axe:[Types.Entities.AXE,"weapon"],redsword:[Types.Entities.REDSWORD,"weapon"],bluesword:[Types.Entities.BLUESWORD,"weapon"],goldensword:[Types.Entities.GOLDENSWORD,"weapon"],morningstar:[Types.Entities.MORNINGSTAR,"weapon"],firefox:[Types.Entities.FIREFOX,"armor"],clotharmor:[Types.Entities.CLOTHARMOR,"armor"],leatherarmor:[Types.Entities.LEATHERARMOR,"armor"],mailarmor:[Types.Entities.MAILARMOR,"armor"],platearmor:[Types.Entities.PLATEARMOR,"armor"],redarmor:[Types.Entities.REDARMOR,"armor"],goldenarmor:[Types.Entities.GOLDENARMOR,"armor"],flask:[Types.Entities.FLASK,"object"],cake:[Types.Entities.CAKE,"object"],burger:[Types.Entities.BURGER,"object"],chest:[Types.Entities.CHEST,"object"],firepotion:[Types.Entities.FIREPOTION,"object"],guard:[Types.Entities.GUARD,"npc"],villagegirl:[Types.Entities.VILLAGEGIRL,"npc"],villager:[Types.Entities.VILLAGER,"npc"],coder:[Types.Entities.CODER,"npc"],scientist:[Types.Entities.SCIENTIST,"npc"],priest:[Types.Entities.PRIEST,"npc"],king:[Types.Entities.KING,"npc"],rick:[Types.Entities.RICK,"npc"],nyan:[Types.Entities.NYAN,"npc"],sorcerer:[Types.Entities.SORCERER,"npc"],agent:[Types.Entities.AGENT,"npc"],octocat:[Types.Entities.OCTOCAT,"npc"],beachnpc:[Types.Entities.BEACHNPC,"npc"],forestnpc:[Types.Entities.FORESTNPC,"npc"],desertnpc:[Types.Entities.DESERTNPC,"npc"],lavanpc:[Types.Entities.LAVANPC,"npc"],getType:function(a){return kinds[Types.getKindAsString(a)][1]}};Types.rankedWeapons=[Types.Entities.SWORD1,Types.Entities.SWORD2,Types.Entities.AXE,Types.Entities.MORNINGSTAR,Types.Entities.BLUESWORD,Types.Entities.REDSWORD,Types.Entities.GOLDENSWORD],Types.rankedArmors=[Types.Entities.CLOTHARMOR,Types.Entities.LEATHERARMOR,Types.Entities.MAILARMOR,Types.Entities.PLATEARMOR,Types.Entities.REDARMOR,Types.Entities.GOLDENARMOR],Types.getWeaponRank=function(a){return _.indexOf(Types.rankedWeapons,a)},Types.getArmorRank=function(a){return _.indexOf(Types.rankedArmors,a)},Types.isPlayer=function(a){return kinds.getType(a)==="player"},Types.isMob=function(a){return kinds.getType(a)==="mob"},Types.isNpc=function(a){return kinds.getType(a)==="npc"},Types.isCharacter=function(a){return Types.isMob(a)||Types.isNpc(a)||Types.isPlayer(a)},Types.isArmor=function(a){return kinds.getType(a)==="armor"},Types.isWeapon=function(a){return kinds.getType(a)==="weapon"},Types.isObject=function(a){return kinds.getType(a)==="object"},Types.isChest=function(a){return a===Types.Entities.CHEST},Types.isItem=function(a){return Types.isWeapon(a)||Types.isArmor(a)||Types.isObject(a)&&!Types.isChest(a)},Types.isHealingItem=function(a){return a===Types.Entities.FLASK||a===Types.Entities.BURGER},Types.isExpendableItem=function(a){return Types.isHealingItem(a)||a===Types.Entities.FIREPOTION||a===Types.Entities.CAKE},Types.getKindFromString=function(a){if(a in kinds)return kinds[a][0]},Types.getKindAsString=function(a){for(var b in kinds)if(kinds[b][0]===a)return b},Types.forEachKind=function(a){for(var b in kinds)a(kinds[b][0],b)},Types.forEachArmor=function(a){Types.forEachKind(function(b,c){Types.isArmor(b)&&a(b,c)})},Types.forEachMobOrNpcKind=function(a){Types.forEachKind(function(b,c){(Types.isMob(b)||Types.isNpc(b))&&a(b,c)})},Types.forEachArmorKind=function(a){Types.forEachKind(function(b,c){Types.isArmor(b)&&a(b,c)})},Types.getOrientationAsString=function(a){switch(a){case Types.Orientations.LEFT:return"left";case Types.Orientations.RIGHT:return"right";case Types.Orientations.UP:return"up";case Types.Orientations.DOWN:return"down"}},Types.getRandomItemKind=function(a){var b=_.union(this.rankedWeapons,this.rankedArmors),c=[Types.Entities.SWORD1,Types.Entities.CLOTHARMOR],d=_.difference(b,c),e=Math.floor(Math.random()*_.size(d));return d[e]},Types.getMessageTypeAsString=function(a){var b;_.each(Types.Messages,function(c,d){c===a&&(b=d)}),b||(b="UNKNOWN");return b},typeof exports!="undefined"&&(module.exports=Types),define("../shared/js/gametypes",function(){}),define("game",["infomanager","bubble","renderer","map","animation","sprite","tile","warrior","gameclient","audio","updater","transition","pathfinder","item","mob","npc","player","character","chest","mobs","exceptions","config","../shared/js/gametypes"],function(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v){var w=Class.extend({init:function(b){this.app=b,this.app.config=v,this.ready=!1,this.started=!1,this.hasNeverStarted=!0,this.renderer=null,this.updater=null,this.pathfinder=null,this.chatinput=null,this.bubbleManager=null,this.audioManager=null,this.player=new h("player",""),this.entities={},this.deathpositions={},this.entityGrid=null,this.pathingGrid=null,this.renderingGrid=null,this.itemGrid=null,this.currentCursor=null,this.mouse={x:0,y:0},this.zoningQueue=[],this.previousClickPosition={},this.selectedX=0,this.selectedY=0,this.selectedCellVisible=!1,this.targetColor="rgba(255, 255, 255, 0.5)",this.targetCellVisible=!0,this.hoveringTarget=!1,this.hoveringMob=!1,this.hoveringItem=!1,this.hoveringCollidingTile=!1,this.infoManager=new a(this),this.currentZoning=null,this.cursors={},this.sprites={},this.animatedTiles=null,this.debugPathing=!1,this.spriteNames=["hand","sword","loot","target","talk","sparks","shadow16","rat","skeleton","skeleton2","spectre","boss","deathknight","ogre","crab","snake","eye","bat","goblin","wizard","guard","king","villagegirl","villager","coder","agent","rick","scientist","nyan","priest","sorcerer","octocat","beachnpc","forestnpc","desertnpc","lavanpc","clotharmor","leatherarmor","mailarmor","platearmor","redarmor","goldenarmor","firefox","death","sword1","axe","chest","sword2","redsword","bluesword","goldensword","item-sword2","item-axe","item-redsword","item-bluesword","item-goldensword","item-leatherarmor","item-mailarmor","item-platearmor","item-redarmor","item-goldenarmor","item-flask","item-cake","item-burger","morningstar","item-morningstar","item-firepotion"]},setup:function(a,d,e,f,g){this.setBubbleManager(new b(a)),this.setRenderer(new c(this,d,e,f)),this.setChatInput(g)},setStorage:function(a){this.storage=a},setRenderer:function(a){this.renderer=a},setUpdater:function(a){this.updater=a},setPathfinder:function(a){this.pathfinder=a},setChatInput:function(a){this.chatinput=a},setBubbleManager:function(a){this.bubbleManager=a},loadMap:function(){var a=this;this.map=new d(!this.renderer.upscaledRendering,this),this.map.ready(function(){log.info("Map loaded.");var b=a.renderer.upscaledRendering?0:a.renderer.scale-1;a.renderer.setTileset(a.map.tilesets[b])})},initPlayer:function(){this.storage.hasAlreadyPlayed()&&(this.player.setSpriteName(this.storage.data.player.armor),this.player.setWeaponName(this.storage.data.player.weapon)),this.player.setSprite(this.sprites[this.player.getSpriteName()]),this.player.idle(),log.debug("Finished initPlayer")},initShadows:function(){this.shadows={},this.shadows.small=this.sprites.shadow16},initCursors:function(){this.cursors.hand="",this.cursors.sword="",this.cursors.loot="",this.cursors.target=this.sprites.target,this.cursors.arrow="",this.cursors.talk=""},initAnimations:function(){this.targetAnimation=new e("idle_down",4,0,16,16),this.targetAnimation.setSpeed(50),this.sparksAnimation=new e("idle_down",6,0,16,16),this.sparksAnimation.setSpeed(120)},initHurtSprites:function(){var a=this;Types.forEachArmorKind(function(b,c){a.sprites[c].createHurtSprite()})},initSilhouettes:function(){var a=this;Types.forEachMobOrNpcKind(function(b,c){a.sprites[c].createSilhouette()}),a.sprites.chest.createSilhouette(),a.sprites["item-cake"].createSilhouette()},initAchievements:function(){var a=this;this.achievements={A_TRUE_WARRIOR:{id:1,name:"A True Warrior",desc:"Find a new weapon"},INTO_THE_WILD:{id:2,name:"Into the Wild",desc:"Venture outside the village"},ANGRY_RATS:{id:3,name:"Angry Rats",desc:"Kill 10 rats",isCompleted:function(){return a.storage.getRatCount()>=10}},SMALL_TALK:{id:4,name:"Small Talk",desc:"Talk to a non-player character"},FAT_LOOT:{id:5,name:"Fat Loot",desc:"Get a new armor set"},UNDERGROUND:{id:6,name:"Underground",desc:"Explore at least one cave"},AT_WORLDS_END:{id:7,name:"At World's End",desc:"Reach the south shore"},COWARD:{id:8,name:"Coward",desc:"Successfully escape an enemy"},TOMB_RAIDER:{id:9,name:"Tomb Raider",desc:"Find the graveyard"},SKULL_COLLECTOR:{id:10,name:"Skull Collector",desc:"Kill 10 skeletons",isCompleted:function(){return a.storage.getSkeletonCount()>=10}},NINJA_LOOT:{id:11,name:"Ninja Loot",desc:"Get hold of an item you didn't fight for"},NO_MANS_LAND:{id:12,name:"No Man's Land",desc:"Travel through the desert"},HUNTER:{id:13,name:"Hunter",desc:"Kill 50 enemies",isCompleted:function(){return a.storage.getTotalKills()>=50}},STILL_ALIVE:{id:14,name:"Still Alive",desc:"Revive your character five times",isCompleted:function(){return a.storage.getTotalRevives()>=5}},MEATSHIELD:{id:15,name:"Meatshield",desc:"Take 5,000 points of damage",isCompleted:function(){return a.storage.getTotalDamageTaken()>=5e3}},HOT_SPOT:{id:16,name:"Hot Spot",desc:"Enter the volcanic mountains"},HERO:{id:17,name:"Hero",desc:"Defeat the final boss"},FOXY:{id:18,name:"Foxy",desc:"Find the Firefox costume",hidden:!0},FOR_SCIENCE:{id:19,name:"For Science",desc:"Enter into a portal",hidden:!0},RICKROLLD:{id:20,name:"Rickroll'd",desc:"Take some singing lessons",hidden:!0}},_.each(this.achievements,function(a){a.isCompleted||(a.isCompleted=function(){return!0}),a.hidden||(a.hidden=!1)}),this.app.initAchievementList(this.achievements),this.storage.hasAlreadyPlayed()&&this.app.initUnlockedAchievements(this.storage.data.achievements.unlocked)},getAchievementById:function(a){var b=null;_.each(this.achievements,function(c,d){c.id===parseInt(a)&&(b=c)});return b},loadSprite:function(a){this.renderer.upscaledRendering?this.spritesets[0][a]=new f(a,1):(this.spritesets[1][a]=new f(a,2),!this.renderer.mobile&&!this.renderer.tablet&&(this.spritesets[2][a]=new f(a,3)))},setSpriteScale:function(a){var b=this;this.renderer.upscaledRendering?this.sprites=this.spritesets[0]:(this.sprites=this.spritesets[a-1],_.each(this.entities,function(a){a.sprite=null,a.setSprite(b.sprites[a.getSpriteName()])}),this.initHurtSprites(),this.initShadows(),this.initCursors())},loadSprites:function(){log.info("Loading sprites..."),this.spritesets=[],this.spritesets[0]={},this.spritesets[1]={},this.spritesets[2]={},_.map(this.spriteNames,this.loadSprite,this)},spritesLoaded:function(){return _.any(this.sprites,function(a){return!a.isLoaded})?!1:!0},setCursor:function(a,b){a in this.cursors?(this.currentCursor=this.cursors[a],this.currentCursorOrientation=b):log.error("Unknown cursor name :"+a)},updateCursorLogic:function(){this.hoveringCollidingTile&&this.started?this.targetColor="rgba(255, 50, 50, 0.5)":this.targetColor="rgba(255, 255, 255, 0.5)",this.hoveringMob&&this.started?(this.setCursor("sword"),this.hoveringTarget=!1,this.targetCellVisible=!1):this.hoveringNpc&&this.started?(this.setCursor("talk"),this.hoveringTarget=!1,this.targetCellVisible=!1):(this.hoveringItem||this.hoveringChest)&&this.started?(this.setCursor("loot"),this.hoveringTarget=!1,this.targetCellVisible=!0):(this.setCursor("hand"),this.hoveringTarget=!1,this.targetCellVisible=!0)},focusPlayer:function(){this.renderer.camera.lookAt(this.player)},addEntity:function(a){var b=this;this.entities[a.id]===undefined?(this.entities[a.id]=a,this.registerEntityPosition(a),!(a instanceof n&&a.wasDropped)&&!this.renderer.mobile&&!this.renderer.tablet&&a.fadeIn(this.currentTime),(this.renderer.mobile||this.renderer.tablet)&&a.onDirty(function(a){b.camera.isVisible(a)&&(a.dirtyRect=b.renderer.getEntityBoundingRect(a),b.checkOtherDirtyRects(a.dirtyRect,a,a.gridX,a.gridY))})):log.error("This entity already exists : "+a.id+" ("+a.kind+")")},removeEntity:function(a){a.id in this.entities?(this.unregisterEntityPosition(a),delete this.entities[a.id]):log.error("Cannot remove entity. Unknown ID : "+a.id)},addItem:function(a,b,c){a.setSprite(this.sprites[a.getSpriteName()]),a.setGridPosition(b,c),a.setAnimation("idle",150),this.addEntity(a)},removeItem:function(a){a?(this.removeFromItemGrid(a,a.gridX,a.gridY),this.removeFromRenderingGrid(a,a.gridX,a.gridY),delete this.entities[a.id]):log.error("Cannot remove item. Unknown ID : "+a.id)},initPathingGrid:function(){this.pathingGrid=[];for(var a=0;a<this.map.height;a+=1){this.pathingGrid[a]=[];for(var b=0;b<this.map.width;b+=1)this.pathingGrid[a][b]=this.map.grid[a][b]}log.info("Initialized the pathing grid with static colliding cells.")},initEntityGrid:function(){this.entityGrid=[];for(var a=0;a<this.map.height;a+=1){this.entityGrid[a]=[];for(var b=0;b<this.map.width;b+=1)this.entityGrid[a][b]={}}log.info("Initialized the entity grid.")},initRenderingGrid:function(){this.renderingGrid=[];for(var a=0;a<this.map.height;a+=1){this.renderingGrid[a]=[];for(var b=0;b<this.map.width;b+=1)this.renderingGrid[a][b]={}}log.info("Initialized the rendering grid.")},initItemGrid:function(){this.itemGrid=[];for(var a=0;a<this.map.height;a+=1){this.itemGrid[a]=[];for(var b=0;b<this.map.width;b+=1)this.itemGrid[a][b]={}}log.info("Initialized the item grid.")},initAnimatedTiles:function(){var a=this,b=this.map;this.animatedTiles=[],this.forEachVisibleTile(function(c,d){if(b.isAnimatedTile(c)){var e=new g(c,b.getTileAnimationLength(c),b.getTileAnimationDelay(c),d),f=a.map.tileIndexToGridPosition(e.index);e.x=f.x,e.y=f.y,a.animatedTiles.push(e)}},1)},addToRenderingGrid:function(a,b,c){this.map.isOutOfBounds(b,c)||(this.renderingGrid[c][b][a.id]=a)},removeFromRenderingGrid:function(a,b,c){a&&this.renderingGrid[c][b]&&a.id in this.renderingGrid[c][b]&&delete this.renderingGrid[c][b][a.id]},removeFromEntityGrid:function(a,b,c){this.entityGrid[c][b][a.id]&&delete this.entityGrid[c][b][a.id]},removeFromItemGrid:function(a,b,c){a&&this.itemGrid[c][b][a.id]&&delete this.itemGrid[c][b][a.id]},removeFromPathingGrid:function(a,b){this.pathingGrid[b][a]=0},registerEntityDualPosition:function(a){a&&(this.entityGrid[a.gridY][a.gridX][a.id]=a,this.addToRenderingGrid(a,a.gridX,a.gridY),a.nextGridX>=0&&a.nextGridY>=0&&(this.entityGrid[a.nextGridY][a.nextGridX][a.id]=a,a instanceof q||(this.pathingGrid[a.nextGridY][a.nextGridX]=1)))},unregisterEntityPosition:function(a){a&&(this.removeFromEntityGrid(a,a.gridX,a.gridY),this.removeFromPathingGrid(a.gridX,a.gridY),this.removeFromRenderingGrid(a,a.gridX,a.gridY),a.nextGridX>=0&&a.nextGridY>=0&&(this.removeFromEntityGrid(a,a.nextGridX,a.nextGridY),this.removeFromPathingGrid(a.nextGridX,a.nextGridY)))},registerEntityPosition:function(a){var b=a.gridX,c=a.gridY;if(a){if(a instanceof r||a instanceof s)this.entityGrid[c][b][a.id]=a,a instanceof q||(this.pathingGrid[c][b]=1);a instanceof n&&(this.itemGrid[c][b][a.id]=a),this.addToRenderingGrid(a,b,c)}},setServerOptions:function(a,b,c){this.host=a,this.port=b,this.username=c},loadAudio:function(){this.audioManager=new j(this)},initMusicAreas:function(){var a=this;_.each(this.map.musicAreas,function(b){a.audioManager.addArea(b.x,b.y,b.w,b.h,b.id)})},run:function(a){var b=this;this.loadSprites(),this.setUpdater(new k(this)),this.camera=this.renderer.camera,this.setSpriteScale(this.renderer.scale);var c=setInterval(function(){b.map.isLoaded&&b.spritesLoaded()&&(b.ready=!0,log.debug("All sprites loaded."),b.loadAudio(),b.initMusicAreas(),b.initAchievements(),b.initCursors(),b.initAnimations(),b.initShadows(),b.initHurtSprites(),!b.renderer.mobile&&!b.renderer.tablet&&b.renderer.upscaledRendering&&b.initSilhouettes(),b.initEntityGrid(),b.initItemGrid(),b.initPathingGrid(),b.initRenderingGrid(),b.setPathfinder(new m(b.map.width,b.map.height)),b.initPlayer(),b.setCursor("hand"),b.connect(a),clearInterval(c))},100)},tick:function(){this.currentTime=(new Date).getTime(),this.started&&(this.updateCursorLogic(),this.updater.update(),this.renderer.renderFrame()),this.isStopped||requestAnimFrame(this.tick.bind(this))},start:function(){this.tick(),this.hasNeverStarted=!1,log.info("Game loop started.")},stop:function(){log.info("Game stopped."),this.isStopped=!0},entityIdExists:function(a){return a in this.entities},getEntityById:function(a){if(a in this.entities)return this.entities[a];log.error("Unknown entity id : "+a,!0)},connect:function(a){var b=this,c=!1;this.client=new i(this.host,this.port),c||this.client.connect(!0),this.client.onDispatched(function(a,c){log.debug("Dispatched to game server "+a+":"+c),b.client.host=a,b.client.port=c,b.client.connect()}),this.client.onConnected(function(){log.info("Starting client/server handshake"),b.player.name=b.username,b.started=!0,b.sendHello(b.player)}),this.client.onEntityList(function(a){var c=_.pluck(b.entities,"id"),d=_.intersection(c,a),e=_.difference(a,d);b.obsoleteEntities=_.reject(b.entities,function(a){return _.include(d,a.id)||a.id===b.player.id}),b.removeObsoleteEntities(),_.size(e)>0&&b.client.sendWho(e)}),this.client.onWelcome(function(c,d,e,f,g){log.info("Received player ID from server : "+c),b.player.id=c,b.playerId=c,b.player.name=d,b.player.setGridPosition(e,f),b.player.setMaxHitPoints(g),b.updateBars(),b.resetCamera(),b.updatePlateauMode(),b.audioManager.updateMusic(),b.addEntity(b.player),b.player.dirtyRect=b.renderer.getEntityBoundingRect(b.player),setTimeout(function(){b.tryUnlockingAchievement("STILL_ALIVE")},1500),b.storage.hasAlreadyPlayed()?(b.showNotification("Welcome back to BrowserQuest!"),b.storage.setPlayerName(d)):(b.storage.initPlayer(b.player.name),b.storage.savePlayer(b.renderer.getPlayerImage(),b.player.getSpriteName(),b.player.getWeaponName()),b.showNotification("Welcome to BrowserQuest!")),b.player.onStartPathing(function(a){var c=a.length-1,d=a[c][0],e=a[c][1];b.player.isMovingToLoot()?b.player.isLootMoving=!1:b.player.isAttacking()||b.client.sendMove(d,e),b.selectedX=d,b.selectedY=e,b.selectedCellVisible=!0;if(b.renderer.mobile||b.renderer.tablet)b.drawTarget=!0,b.clearTarget=!0,b.renderer.targetRect=b.renderer.getTargetBoundingRect(),b.checkOtherDirtyRects(b.renderer.targetRect,null,b.selectedX,b.selectedY)}),b.player.onCheckAggro(function(){b.forEachMob(function(a){a.isAggressive&&!a.isAttacking()&&b.player.isNear(a,a.aggroRange)&&b.player.aggro(a)})}),b.player.onAggro(function(a){!a.isWaitingToAttack(b.player)&&!b.player.isAttackedBy(a)&&(b.player.log_info("Aggroed by "+a.id+" at ("+b.player.gridX+", "+b.player.gridY+")"),b.client.sendAggro(a),a.waitToAttack(b.player))}),b.player.onBeforeStep(function(){var a=b.getEntityAt(b.player.nextGridX,b.player.nextGridY);a&&a.id!==b.playerId&&log.debug("Blocked by "+a.id),b.unregisterEntityPosition(b.player)}),b.player.onStep(function(){b.player.hasNextStep()&&b.registerEntityDualPosition(b.player),b.isZoningTile(b.player.gridX,b.player.gridY)&&b.enqueueZoningFrom(b.player.gridX,b.player.gridY),b.player.forEachAttacker(function(a){a.isAdjacent(a.target)?a.lookAtTarget():a.follow(b.player)}),(b.player.gridX<=85&&b.player.gridY<=179&&b.player.gridY>178||b.player.gridX<=85&&b.player.gridY<=266&&b.player.gridY>265)&&b.tryUnlockingAchievement("INTO_THE_WILD"),b.player.gridX<=85&&b.player.gridY<=293&&b.player.gridY>292&&b.tryUnlockingAchievement("AT_WORLDS_END"),b.player.gridX<=85&&b.player.gridY<=100&&b.player.gridY>99&&b.tryUnlockingAchievement("NO_MANS_LAND"),b.player.gridX<=85&&b.player.gridY<=51&&b.player.gridY>50&&b.tryUnlockingAchievement("HOT_SPOT"),b.player.gridX<=27&&b.player.gridY<=123&&b.player.gridY>112&&b.tryUnlockingAchievement("TOMB_RAIDER"),b.updatePlayerCheckpoint(),b.player.isDead||b.audioManager.updateMusic()}),b.player.onStopPathing(function(a,c){b.player.hasTarget()&&b.player.lookAtTarget(),b.selectedCellVisible=!1;if(b.isItemAt(a,c)){var d=b.getItemAt(a,c);try{b.player.loot(d),b.client.sendLoot(d),b.removeItem(d),b.showNotification(d.getLootMessage()),d.type==="armor"&&b.tryUnlockingAchievement("FAT_LOOT"),d.type==="weapon"&&b.tryUnlockingAchievement("A_TRUE_WARRIOR"),d.kind===Types.Entities.CAKE&&b.tryUnlockingAchievement("FOR_SCIENCE"),d.kind===Types.Entities.FIREPOTION&&(b.tryUnlockingAchievement("FOXY"),b.audioManager.playSound("firefox")),Types.isHealingItem(d.kind)?b.audioManager.playSound("heal"):b.audioManager.playSound("loot"),d.wasDropped&&!_(d.playersInvolved).include(b.playerId)&&b.tryUnlockingAchievement("NINJA_LOOT")}catch(e){if(e instanceof u.LootException)b.showNotification(e.message),b.audioManager.playSound("noloot");else throw e}}if(!b.player.hasTarget()&&b.map.isDoor(a,c)){var f=b.map.getDoorDestination(a,c);b.player.setGridPosition(f.x,f.y),b.player.nextGridX=f.x,b.player.nextGridY=f.y,b.player.turnTo(f.orientation),b.client.sendTeleport(f.x,f.y),b.renderer.mobile&&f.cameraX&&f.cameraY?(b.camera.setGridPosition(f.cameraX,f.cameraY),b.resetZone()):f.portal?b.assignBubbleTo(b.player):(b.camera.focusEntity(b.player),b.resetZone()),_.size(b.player.attackers)>0&&setTimeout(function(){b.tryUnlockingAchievement("COWARD")},500),b.player.forEachAttacker(function(a){a.disengage(),a.idle()}),b.updatePlateauMode(),b.checkUndergroundAchievement(),(b.renderer.mobile||b.renderer.tablet)&&b.renderer.clearScreen(b.renderer.context),f.portal&&b.audioManager.playSound("teleport"),b.player.isDead||b.audioManager.updateMusic()}b.player.target instanceof p?b.makeNpcTalk(b.player.target):b.player.target instanceof s&&(b.client.sendOpen(b.player.target),b.audioManager.playSound("chest")),b.player.forEachAttacker(function(a){a.isAdjacentNonDiagonal(b.player)||a.follow(b.player)}),b.unregisterEntityPosition(b.player),b.registerEntityPosition(b.player)}),b.player.onRequestPath(function(a,c){var d=[b.player];b.player.hasTarget()&&d.push(b.player.target);return b.findPath(b.player,a,c,d)}),b.player.onDeath(function(){log.info(b.playerId+" is dead"),b.player.stopBlinking(),b.player.setSprite(b.sprites.death),b.player.animate("death",120,1,function(){log.info(b.playerId+" was removed"),b.removeEntity(b.player),b.removeFromRenderingGrid(b.player,b.player.gridX,b.player.gridY),b.player=null,b.client.disable(),setTimeout(function(){b.playerdeath_callback()},1e3)}),b.player.forEachAttacker(function(a){a.disengage(),a.idle()}),b.audioManager.fadeOutCurrentMusic(),b.audioManager.playSound("death")}),b.player.onHasMoved(function(a){b.assignBubbleTo(a)}),b.player.onArmorLoot(function(a){b.player.switchArmor(b.sprites[a])}),b.player.onSwitchItem(function(){b.storage.savePlayer(b.renderer.getPlayerImage(),b.player.getArmorName(),b.player.getWeaponName()),b.equipment_callback&&b.equipment_callback()}),b.player.onInvincible(function(){b.invincible_callback(),b.player.switchArmor(b.sprites.firefox)}),b.client.onSpawnItem(function(a,c,d){log.info("Spawned "+Types.getKindAsString(a.kind)+" ("+a.id+") at "+c+", "+d),b.addItem(a,c,d)}),b.client.onSpawnChest(function(a,c,d){log.info("Spawned chest ("+a.id+") at "+c+", "+d),a.setSprite(b.sprites[a.getSpriteName()]),a.setGridPosition(c,d),a.setAnimation("idle_down",150),b.addEntity(a,c,d),a.onOpen(function(){a.stopBlinking(),a.setSprite(b.sprites.death),a.setAnimation("death",120,1,function(){log.info(a.id+" was removed"),b.removeEntity(a),b.removeFromRenderingGrid(a,a.gridX,a.gridY),b.previousClickPosition={}})})}),b.client.onSpawnCharacter(function(a,c,d,e,f){if(!b.entityIdExists(a.id))try{if(a.id!==b.playerId){a.setSprite(b.sprites[a.getSpriteName()]),a.setGridPosition(c,d),a.setOrientation(e),a.idle(),b.addEntity(a),log.debug("Spawned "+Types.getKindAsString(a.kind)+" ("+a.id+") at "+a.gridX+", "+a.gridY);if(a instanceof r){a.onBeforeStep(function(){b.unregisterEntityPosition(a)}),a.onStep(function(){a.isDying||(b.registerEntityDualPosition(a),a.forEachAttacker(function(b){b.isAdjacent(b.target)?b.lookAtTarget():b.follow(a)}))}),a.onStopPathing(function(c,d){if(!a.isDying){a.hasTarget()&&a.isAdjacent(a.target)&&a.lookAtTarget();if(a instanceof q){var e=a.destination.gridX,f=a.destination.gridY;if(b.map.isDoor(e,f)){var g=b.map.getDoorDestination(e,f);a.setGridPosition(g.x,g.y)}}a.forEachAttacker(function(c){!c.isAdjacentNonDiagonal(a)&&c.id!==b.playerId&&c.follow(a)}),b.unregisterEntityPosition(a),b.registerEntityPosition(a)}}),a.onRequestPath(function(c,d){var e=[a],f=function(a){e.push(a),a.forEachAttacker(function(a){e.push(a)})};a.hasTarget()?f(a.target):a.previousTarget&&f(a.previousTarget);return b.findPath(a,c,d,e)}),a.onDeath(function(){log.info(a.id+" is dead"),a instanceof o&&(b.deathpositions[a.id]={x:a.gridX,y:a.gridY}),a.isDying=!0,a.setSprite(b.sprites[a instanceof t.Rat?"rat":"death"]),a.animate("death",120,1,function(){log.info(a.id+" was removed"),b.removeEntity(a),b.removeFromRenderingGrid(a,a.gridX,a.gridY)}),a.forEachAttacker(function(a){a.disengage()}),b.player.target&&b.player.target.id===a.id&&b.player.disengage(),b.removeFromEntityGrid(a,a.gridX,a.gridY),b.removeFromPathingGrid(a.gridX,a.gridY),b.camera.isVisible(a)&&b.audioManager.playSound("kill"+Math.floor(Math.random()*2+1)),b.updateCursor()}),a.onHasMoved(function(a){b.assignBubbleTo(a)});if(a instanceof o&&f){var g=b.getEntityById(f);g&&b.createAttackLink(a,g)}}}}catch(h){log.error(h)}else log.debug("Character "+a.id+" already exists. Don't respawn.")}),b.client.onDespawnEntity(function(a){var c=b.getEntityById(a);c&&(log.info("Despawning "+Types.getKindAsString(c.kind)+" ("+c.id+")"),c.gridX===b.previousClickPosition.x&&c.gridY===b.previousClickPosition.y&&(b.previousClickPosition={}),c instanceof n?b.removeItem(c):c instanceof r?(c.forEachAttacker(function(a){a.canReachTarget()&&a.hit()}),c.die()):c instanceof s&&c.open(),c.clean())}),b.client.onItemBlink(function(a){var c=b.getEntityById(a);c&&c.blink(150)}),b.client.onEntityMove(function(a,c,d){var e=null;a!==b.playerId&&(e=b.getEntityById(a),e&&(b.player.isAttackedBy(e)&&b.tryUnlockingAchievement("COWARD"),e.disengage(),e.idle(),b.makeCharacterGoTo(e,c,d)))}),b.client.onEntityDestroy(function(a){var c=b.getEntityById(a);c&&(c instanceof n?b.removeItem(c):b.removeEntity(c),log.debug("Entity was destroyed: "+c.id))}),b.client.onPlayerMoveToItem(function(a,c){var d,e;a!==b.playerId&&(d=b.getEntityById(a),e=b.getEntityById(c),d&&e&&b.makeCharacterGoTo(d,e.gridX,e.gridY))}),b.client.onEntityAttack(function(a,c){var d=b.getEntityById(a),e=b.getEntityById(c);d&&e&&d.id!==b.playerId&&(log.debug(d.id+" attacks "+e.id),d&&e instanceof q&&e.id!==b.playerId&&e.target&&e.target.id===d.id&&d.getDistanceToEntity(e)<3?setTimeout(function(){b.createAttackLink(d,e)},200):b.createAttackLink(d,e))}),b.client.onPlayerDamageMob(function(a,c){var d=b.getEntityById(a);d&&c&&b.infoManager.addDamageInfo(c,d.x,d.y-15,"inflicted")}),b.client.onPlayerKillMob(function(a){var c=Types.getKindAsString(a);c==="skeleton2"&&(c="greater skeleton"),c==="eye"&&(c="evil eye"),c==="deathknight"&&(c="death knight"),c==="boss"?b.showNotification("You killed the skeleton king"):_.include(["a","e","i","o","u"],c[0])?b.showNotification("You killed an "+c):b.showNotification("You killed a "+c),b.storage.incrementTotalKills(),b.tryUnlockingAchievement("HUNTER"),a===Types.Entities.RAT&&(b.storage.incrementRatCount(),b.tryUnlockingAchievement("ANGRY_RATS"));if(a===Types.Entities.SKELETON||a===Types.Entities.SKELETON2)b.storage.incrementSkeletonCount(),b.tryUnlockingAchievement("SKULL_COLLECTOR");a===Types.Entities.BOSS&&b.tryUnlockingAchievement("HERO")}),b.client.onPlayerChangeHealth(function(a,c){var d=b.player,e,f;d&&!d.isDead&&!d.invincible&&(f=a<=d.hitPoints,e=a-d.hitPoints,d.hitPoints=a,d.hitPoints<=0&&d.die(),f?(d.hurt(),b.infoManager.addDamageInfo(e,d.x,d.y-15,"received"),b.audioManager.playSound("hurt"),b.storage.addDamage(-e),b.tryUnlockingAchievement("MEATSHIELD"),b.playerhurt_callback&&b.playerhurt_callback()):c||b.infoManager.addDamageInfo("+"+e,d.x,d.y-15,"healed"),b.updateBars())}),b.client.onPlayerChangeMaxHitPoints(function(a){b.player.maxHitPoints=a,b.player.hitPoints=a,b.updateBars()}),b.client.onPlayerEquipItem(function(a,c){var d=b.getEntityById(a),e=Types.getKindAsString(c);d&&(Types.isArmor(c)?d.setSprite(b.sprites[e]):Types.isWeapon(c)&&d.setWeaponName(e))}),b.client.onPlayerTeleport(function(a,c,d){var e=null,f;a!==b.playerId&&(e=b.getEntityById(a),e&&(f=e.orientation,b.makeCharacterTeleportTo(e,c,d),e.setOrientation(f),e.forEachAttacker(function(a){a.disengage(),a.idle(),a.stop()})))}),b.client.onDropItem(function(a,c){var d=b.getDeadMobPosition(c);d&&(b.addItem(a,d.x,d.y),b.updateCursor())}),b.client.onChatMessage(function(a,c){var d=b.getEntityById(a);b.createBubble(a,c),b.assignBubbleTo(d),b.audioManager.playSound("chat")}),b.client.onPopulationChange(function(a,c){b.nbplayers_callback&&b.nbplayers_callback(a,c)}),b.client.onDisconnected(function(a){b.player&&b.player.die(),b.disconnect_callback&&b.disconnect_callback(a)}),b.gamestart_callback(),b.hasNeverStarted&&(b.start(),a())})},createAttackLink:function(a,b){a.hasTarget()&&a.removeTarget(),a.engage(b),a.id!==this.playerId&&b.addAttacker(a)},sendHello:function(){this.client.sendHello(this.player)},getMouseGridPosition:function(){var a=this.mouse.x,b=this.mouse.y,c=this.renderer.camera,d=this.renderer.scale,e=this.renderer.tilesize,f=a%(e*d),g=b%(e*d),h=(a-f)/(e*d)+c.gridX,i=(b-g)/(e*d)+c.gridY;return{x:h,y:i}},makeCharacterGoTo:function(a,b,c){this.map.isOutOfBounds(b,c)||a.go(b,c)},makeCharacterTeleportTo:function(a,b,c){this.map.isOutOfBounds(b,c)?log.debug("Teleport out of bounds: "+b+", "+c):(this.unregisterEntityPosition(a),a.setGridPosition(b,c),this.registerEntityPosition(a),this.assignBubbleTo(a))},makePlayerGoTo:function(a,b){this.makeCharacterGoTo(this.player,a,b)},makePlayerGoToItem:function(a){a&&(this.player.isLootMoving=!0,this.makePlayerGoTo(a.gridX,a.gridY),this.client.sendLootMove(a,a.gridX,a.gridY))},makePlayerTalkTo:function(a){a&&(this.player.setTarget(a),this.player.follow(a))},makePlayerOpenChest:function(a){a&&(this.player.setTarget(a),this.player.follow(a))},makePlayerAttack:function(a){this.createAttackLink(this.player,a),this.client.sendAttack(a)},makeNpcTalk:function(a){var b;a&&(b=a.talk(),this.previousClickPosition={},b?(this.createBubble(a.id,b),this.assignBubbleTo(a),this.audioManager.playSound("npc")):(this.destroyBubble(a.id),this.audioManager.playSound("npc-end")),this.tryUnlockingAchievement("SMALL_TALK"),a.kind===Types.Entities.RICK&&this.tryUnlockingAchievement("RICKROLLD"))},forEachEntity:function(a){_.each(this.entities,function(b){a(b)})},forEachMob:function(a){_.each(this.entities,function(b){b instanceof o&&a(b)})},forEachVisibleEntityByDepth:function(a){var b=this,c=this.map;this.camera.forEachVisiblePosition(function(d,e){c.isOutOfBounds(d,e)||b.renderingGrid[e][d]&&_.each(b.renderingGrid[e][d],function(b){a(b)})},this.renderer.mobile?0:2)},forEachVisibleTileIndex:function(a,b){var c=this.map;this.camera.forEachVisiblePosition(function(b,d){c.isOutOfBounds(b,d)||a(c.GridPositionToTileIndex(b,d)-1)},b)},forEachVisibleTile:function(a,b){var c=this,d=this.map;d.isLoaded&&this.forEachVisibleTileIndex(function(b){_.isArray(d.data[b])?_.each(d.data[b],function(c){a(c-1,b)}):_.isNaN(d.data[b]-1)||a(d.data[b]-1,b)},b)},forEachAnimatedTile:function(a){this.animatedTiles&&_.each(this.animatedTiles,function(b){a(b)})},getEntityAt:function(a,b){if(this.map.isOutOfBounds(a,b)||!this.entityGrid)return null;var c=this.entityGrid[b][a],d=null;_.size(c)>0?d=c[_.keys(c)[0]]:d=this.getItemAt(a,b);return d},getMobAt:function(a,b){var c=this.getEntityAt(a,b);return c&&c instanceof o?c:null},getNpcAt:function(a,b){var c=this.getEntityAt(a,b);return c&&c instanceof p?c:null},getChestAt:function(a,b){var c=this.getEntityAt(a,b);return c&&c instanceof s?c:null},getItemAt:function(a,b){if(this.map.isOutOfBounds(a,b)||!this.itemGrid)return null;var c=this.itemGrid[b][a],d=null;_.size(c)>0&&(_.each(c,function(a){Types.isExpendableItem(a.kind)&&(d=a)}),d||(d=c[_.keys(c)[0]]));return d},isEntityAt:function(a,b){return!_.isNull(this.getEntityAt(a,b))},isMobAt:function(a,b){return!_.isNull(this.getMobAt(a,b))},isItemAt:function(a,b){return!_.isNull(this.getItemAt(a,b))},isNpcAt:function(a,b){return!_.isNull(this.getNpcAt(a,b))},isChestAt:function(a,b){return!_.isNull(this.getChestAt(a,b))},findPath:function(a,b,c,d){var e=this,f=this.pathingGrid;path=[],isPlayer=a===this.player;if(this.map.isColliding(b,c))return path;this.pathfinder&&a?(d&&_.each(d,function(a){e.pathfinder.ignoreEntity(a)}),path=this.pathfinder.findPath(f,a,b,c,!1),d&&this.pathfinder.clearIgnoreList()):log.error("Error while finding the path to "+b+", "+c+" for "+a.id);return path},togglePathingGrid:function(){this.debugPathing?this.debugPathing=!1:this.debugPathing=!0},toggleDebugInfo:function(){this.renderer&&this.renderer.isDebugInfoVisible?this.renderer.isDebugInfoVisible=!1:this.renderer.isDebugInfoVisible=!0},movecursor:function(){var a=this.getMouseGridPosition(),b=a.x,c=a.y;if(this.player&&!this.renderer.mobile&&!this.renderer.tablet){this.hoveringCollidingTile=this.map.isColliding(b,c),this.hoveringPlateauTile=this.player.isOnPlateau?!this.map.isPlateau(b,c):this.map.isPlateau(b,c),this.hoveringMob=this.isMobAt(b,c),this.hoveringItem=this.isItemAt(b,c),this.hoveringNpc=this.isNpcAt(b,c),this.hoveringChest=this.isChestAt(b,c);if(this.hoveringMob||this.hoveringNpc||this.hoveringChest){var d=this.getEntityAt(b,c);!d.isHighlighted&&this.renderer.supportsSilhouettes&&(this.lastHovered&&this.lastHovered.setHighlight(!1),this.lastHovered=d,d.setHighlight(!0))}else this.lastHovered&&(this.lastHovered.setHighlight(!1),this.lastHovered=null)}},click:function(){var a=this.getMouseGridPosition(),b;if(a.x!==this.previousClickPosition.x||a.y!==this.previousClickPosition.y)this.previousClickPosition=a,this.started&&this.player&&!this.isZoning()&&!this.isZoningTile(this.player.nextGridX,this.player.nextGridY)&&!this.player.isDead&&!this.hoveringCollidingTile&&!this.hoveringPlateauTile&&(b=this.getEntityAt(a.x,a.y),b instanceof o?this.makePlayerAttack(b):b instanceof n?this.makePlayerGoToItem(b):b instanceof p?this.player.isAdjacentNonDiagonal(b)===!1?this.makePlayerTalkTo(b):this.makeNpcTalk(b):b instanceof s?this.makePlayerOpenChest(b):this.makePlayerGoTo(a.x,a.y))},isMobOnSameTile:function(a,b,c){var d=b||a.gridX,e=c||a.gridY,f=this.entityGrid[e][d],g=!1;_.each(f,function(b){b instanceof o&&b.id!==a.id&&(g=!0)});return g},getFreeAdjacentNonDiagonalPosition:function(a){var b=this,c=null;a.forEachAdjacentNonDiagonalPosition(function(a,d,e){!c&&!b.map.isColliding(a,d)&&!b.isMobAt(a,d)&&(c={x:a,y:d,o:e})});return c},tryMovingToADifferentTile:function(a){var b=a,c=a.target;if(b&&c&&c instanceof q){if(!c.isMoving()&&b.getDistanceToEntity(c)===0){var d;switch(c.orientation){case Types.Orientations.UP:d={x:c.gridX,y:c.gridY-1,o:c.orientation};break;case Types.Orientations.DOWN:d={x:c.gridX,y:c.gridY+1,o:c.orientation};break;case Types.Orientations.LEFT:d={x:c.gridX-1,y:c.gridY,o:c.orientation};break;case Types.Orientations.RIGHT:d={x:c.gridX+1,y:c.gridY,o:c.orientation}}if(d){b.previousTarget=c,b.disengage(),b.idle(),this.makeCharacterGoTo(b,d.x,d.y),c.adjacentTiles[d.o]=!0;return!0}}if(!c.isMoving()&&b.isAdjacentNonDiagonal(c)&&this.isMobOnSameTile(b)){var d=this.getFreeAdjacentNonDiagonalPosition(c);if(d&&!c.adjacentTiles[d.o]){if(this.player.target&&b.id===this.player.target.id)return!1;b.previousTarget=c,b.disengage(),b.idle(),this.makeCharacterGoTo(b,d.x,d.y),c.adjacentTiles[d.o]=!0;return!0}}}return!1},onCharacterUpdate:function(a){var b=this.currentTime,c=this;if(a.previousTarget&&!a.isMoving()&&a instanceof o){var d=a.previousTarget;if(this.getEntityById(d.id)){a.previousTarget=null,this.createAttackLink(a,d);return}}if(a.isAttacking()&&!a.previousTarget){var e=this.tryMovingToADifferentTile(a);a.canAttack(b)?e||(a.hasTarget()&&a.getOrientationTo(a.target)!==a.orientation&&a.lookAtTarget(),a.hit(),a.id===this.playerId&&this.client.sendHit(a.target),a instanceof q&&this.camera.isVisible(a)&&this.audioManager.playSound("hit"+Math.floor(Math.random()*2+1)),a.hasTarget()&&a.target.id===this.playerId&&this.player&&!this.player.invincible&&this.client.sendHurt(a)):a.hasTarget()&&a.isDiagonallyAdjacent(a.target)&&a.target instanceof q&&!a.target.isMoving()&&a.follow(a.target)}},isZoningTile:function(a,b){var c=this.camera;a=a-c.gridX,b=b-c.gridY;return a===0||b===0||a===c.gridW-1||b===c.gridH-1?!0:!1},getZoningOrientation:function(a,b){var c="",d=this.camera;a=a-d.gridX,b=b-d.gridY,a===0?c=Types.Orientations.LEFT:b===0?c=Types.Orientations.UP:a===d.gridW-1?c=Types.Orientations.RIGHT:b===d.gridH-1&&(c=Types.Orientations.DOWN);return c},startZoningFrom:function(a,b){this.zoningOrientation=this.getZoningOrientation(a,b);if(this.renderer.mobile||this.renderer.tablet){var c=this.zoningOrientation,d=this.camera,e=this.renderer.tilesize,a=d.x,b=d.y,f=(d.gridW-2)*e,g=(d.gridH-2)*e;if(c===Types.Orientations.LEFT||c===Types.Orientations.RIGHT)a=c===Types.Orientations.LEFT?d.x-f:d.x+f;else if(c===Types.Orientations.UP||c===Types.Orientations.DOWN)b=c===Types.Orientations.UP?d.y-g:d.y+g;d.setPosition(a,b),this.renderer.clearScreen(this.renderer.context),this.endZoning(),this.forEachVisibleEntityByDepth(function(a){a.setDirty()})}else this.currentZoning=new l;this.bubbleManager.clean(),this.client.sendZone()},enqueueZoningFrom:function(a,b){this.zoningQueue.push({x:a,y:b}),this.zoningQueue.length===1&&this.startZoningFrom(a,b)},endZoning:function(){this.currentZoning=null,this.resetZone(),this.zoningQueue.shift();if(this.zoningQueue.length>0){var a=this.zoningQueue[0];this.startZoningFrom(a.x,a.y)}},isZoning:function(){return!_.isNull(this.currentZoning)},resetZone:function(){this.bubbleManager.clean(),this.initAnimatedTiles(),this.renderer.renderStaticCanvases()},resetCamera:function(){this.camera.focusEntity(this.player),this.resetZone()},say:function(a){this.client.sendChat(a)},createBubble:function(a,b){this.bubbleManager.create(a,b,this.currentTime)},destroyBubble:function(a){this.bubbleManager.destroyBubble(a)},assignBubbleTo:function(a){var b=this.bubbleManager.getBubbleById(a.id);if(b){var c=this.renderer.scale,d=16*c,e=(a.x-this.camera.x)*c,f=parseInt(b.element.css("width"))+24,g=f/2-d/2,h,i;a instanceof p?h=0:c===2?this.renderer.mobile?h=0:h=15:h=12,i=(a.y-this.camera.y)*c-d*2-h,b.element.css("left",e-g+"px"),b.element.css("top",i+"px")}},restart:function(){log.debug("Beginning restart"),this.entities={},this.initEntityGrid(),this.initPathingGrid(),this.initRenderingGrid(),this.player=new h("player",this.username),this.initPlayer(),this.started=!0,this.client.enable(),this.sendHello(this.player),this.storage.incrementRevives(),(this.renderer.mobile||this.renderer.tablet)&&this.renderer.clearScreen(this.renderer.context),log.debug("Finished restart")},onGameStart:function(a){this.gamestart_callback=a},onDisconnect:function(a){this.disconnect_callback=a},onPlayerDeath:function(a){this.playerdeath_callback=a},onPlayerHealthChange:function(a){this.playerhp_callback=a},onPlayerHurt:function(a){this.playerhurt_callback=a},onPlayerEquipmentChange:function(a){this.equipment_callback=a},onNbPlayersChange:function(a){this.nbplayers_callback=a},onNotification:function(a){this.notification_callback=a},onPlayerInvincible:function(a){this.invincible_callback=a},resize:function(){var a=this.camera.x,b=this.camera.y,c=this.renderer.scale,d=this.renderer.getScaleFactor();this.renderer.rescale(d),this.camera=this.renderer.camera,this.camera.setPosition(a,b),this.renderer.renderStaticCanvases()},updateBars:function(){this.player&&this.playerhp_callback&&this.playerhp_callback(this.player.hitPoints,this.player.maxHitPoints)},getDeadMobPosition:function(a){var b;a in this.deathpositions&&(b=this.deathpositions[a],delete this.deathpositions[a]);return b},onAchievementUnlock:function(a){this.unlock_callback=a},tryUnlockingAchievement:function(a){var b=null;a in this.achievements&&(b=this.achievements[a],b.isCompleted()&&this.storage.unlockAchievement(b.id)&&this.unlock_callback&&(this.unlock_callback(b.id,b.name,b.desc),this.audioManager.playSound("achievement")))},showNotification:function(a){this.notification_callback&&this.notification_callback(a)},removeObsoleteEntities:function(){var a=_.size(this.obsoleteEntities),b=this;a>0&&(_.each(this.obsoleteEntities,function(a){a.id!=b.player.id&&b.removeEntity(a)}),log.debug("Removed "+a+" entities: "+_.pluck(_.reject(this.obsoleteEntities,function(a){return a===b.player.id}),"id")),this.obsoleteEntities=null)},updateCursor:function(){this.movecursor(),this.updateCursorLogic()},updatePlateauMode:function(){this.map.isPlateau(this.player.gridX,this.player.gridY)?this.player.isOnPlateau=!0:this.player.isOnPlateau=!1},updatePlayerCheckpoint:function(){var a=this.map.getCurrentCheckpoint(this.player);if(a){var b=this.player.lastCheckpoint;if(!b||b&&b.id!==a.id)this.player.lastCheckpoint=a,this.client.sendCheck(a.id)}},checkUndergroundAchievement:function(){var a=this.audioManager.getSurroundingMusic(this.player);a&&a.name==="cave"&&this.tryUnlockingAchievement("UNDERGROUND")},forEachEntityAround:function(a,b,c,d){for(var e=a-c,f=a+c;e<=f;e+=1)for(var g=b-c,h=b+c;g<=h;g+=1)this.map.isOutOfBounds(e,g)||_.each(this.renderingGrid[g][e],function(a){d(a)})},checkOtherDirtyRects:function(a,b,c,d){var e=this.renderer;this.forEachEntityAround(c,d,2,function(c){if(!b||!b.id||c.id!==b.id)if(!c.isDirty){var d=e.getEntityBoundingRect(c);e.isIntersecting(a,d)&&c.setDirty()}}),b&&!b.hasOwnProperty("index")&&this.forEachAnimatedTile(function(b){if(!b.isDirty){var c=e.getTileBoundingRect(b);e.isIntersecting(a,c)&&(b.isDirty=!0)}});if(!this.drawTarget&&this.selectedCellVisible){var f=e.getTargetBoundingRect();e.isIntersecting(a,f)&&(this.drawTarget=!0,this.renderer.targetRect=f)}}});return w})
+
+define(['infomanager', 'bubble', 'renderer', 'map', 'animation', 'sprite', 'tile',
+        'warrior', 'gameclient', 'audio', 'updater', 'transition', 'pathfinder',
+        'item', 'mob', 'npc', 'player', 'character', 'chest', 'mobs', 'exceptions', 'config', '../shared/js/gametypes'],
+function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedTile,
+         Warrior, GameClient, AudioManager, Updater, Transition, Pathfinder,
+         Item, Mob, Npc, Player, Character, Chest, Mobs, Exceptions, config) {
+    
+    var Game = Class.extend({
+        init: function(app) {
+            this.app = app;
+            this.app.config = config;
+            this.ready = false;
+            this.started = false;
+            this.hasNeverStarted = true;
+        
+            this.renderer = null;
+            this.updater = null;
+            this.pathfinder = null;
+            this.chatinput = null;
+            this.bubbleManager = null;
+            this.audioManager = null;
+        
+            // Player
+            this.player = new Warrior("player", "");
+    
+            // Game state
+            this.entities = {};
+            this.deathpositions = {};
+            this.entityGrid = null;
+            this.pathingGrid = null;
+            this.renderingGrid = null;
+            this.itemGrid = null;
+            this.currentCursor = null;
+            this.mouse = { x: 0, y: 0 };
+            this.zoningQueue = [];
+            this.previousClickPosition = {};
+    
+            this.selectedX = 0;
+            this.selectedY = 0;
+            this.selectedCellVisible = false;
+            this.targetColor = "rgba(255, 255, 255, 0.5)";
+            this.targetCellVisible = true;
+            this.hoveringTarget = false;
+            this.hoveringMob = false;
+            this.hoveringItem = false;
+            this.hoveringCollidingTile = false;
+        
+            // combat
+            this.infoManager = new InfoManager(this);
+        
+            // zoning
+            this.currentZoning = null;
+        
+            this.cursors = {};
+
+            this.sprites = {};
+        
+            // tile animation
+            this.animatedTiles = null;
+        
+            // debug
+            this.debugPathing = false;
+        
+            // sprites
+            this.spriteNames = ["hand", "sword", "loot", "target", "talk", "sparks", "shadow16", "rat", "skeleton", "skeleton2", "spectre", "boss", "deathknight", 
+                                "ogre", "crab", "snake", "eye", "bat", "goblin", "wizard", "guard", "king", "villagegirl", "villager", "coder", "agent", "rick", "scientist", "nyan", "priest", 
+                                "sorcerer", "octocat", "beachnpc", "forestnpc", "desertnpc", "lavanpc", "clotharmor", "leatherarmor", "mailarmor", 
+                                "platearmor", "redarmor", "goldenarmor", "firefox", "death", "sword1", "axe", "chest",
+                                "sword2", "redsword", "bluesword", "goldensword", "item-sword2", "item-axe", "item-redsword", "item-bluesword", "item-goldensword", "item-leatherarmor", "item-mailarmor", 
+                                "item-platearmor", "item-redarmor", "item-goldenarmor", "item-flask", "item-cake", "item-burger", "morningstar", "item-morningstar", "item-firepotion"];
+        },
+    
+        setup: function($bubbleContainer, canvas, background, foreground, input) {
+            this.setBubbleManager(new BubbleManager($bubbleContainer));
+            this.setRenderer(new Renderer(this, canvas, background, foreground));
+            this.setChatInput(input);
+        },
+        
+        setStorage: function(storage) {
+            this.storage = storage;
+        },
+    
+        setRenderer: function(renderer) {
+            this.renderer = renderer;
+        },
+
+        setUpdater: function(updater) {
+            this.updater = updater;
+        },
+    
+        setPathfinder: function(pathfinder) {
+            this.pathfinder = pathfinder;
+        },
+    
+        setChatInput: function(element) {
+            this.chatinput = element;
+        },
+    
+        setBubbleManager: function(bubbleManager) {
+            this.bubbleManager = bubbleManager;
+        },
+
+        loadMap: function() {
+            var self = this;
+    
+            this.map = new Map(!this.renderer.upscaledRendering, this);
+    
+            this.map.ready(function() {
+                log.info("Map loaded.");
+                var tilesetIndex = self.renderer.upscaledRendering ? 0 : self.renderer.scale - 1;
+                self.renderer.setTileset(self.map.tilesets[tilesetIndex]);
+            });
+        },
+    
+        initPlayer: function() {
+            if(this.storage.hasAlreadyPlayed()) {
+                this.player.setSpriteName(this.storage.data.player.armor);
+                this.player.setWeaponName(this.storage.data.player.weapon);
+            }
+        
+            this.player.setSprite(this.sprites[this.player.getSpriteName()]);
+            this.player.idle();
+        
+            log.debug("Finished initPlayer");
+        },
+
+        initShadows: function() {
+            this.shadows = {};
+            this.shadows["small"] = this.sprites["shadow16"];
+        },
+
+        initCursors: function() {
+            this.cursors["hand"] = this.sprites["hand"];
+            this.cursors["sword"] = this.sprites["sword"];
+            this.cursors["loot"] = this.sprites["loot"];
+            this.cursors["target"] = this.sprites["target"];
+            this.cursors["arrow"] = this.sprites["arrow"];
+            this.cursors["talk"] = this.sprites["talk"];
+        },
+    
+        initAnimations: function() {
+            this.targetAnimation = new Animation("idle_down", 4, 0, 16, 16);
+            this.targetAnimation.setSpeed(50);
+        
+            this.sparksAnimation = new Animation("idle_down", 6, 0, 16, 16);
+            this.sparksAnimation.setSpeed(120);
+        },
+    
+        initHurtSprites: function() {
+            var self = this;
+        
+            Types.forEachArmorKind(function(kind, kindName) {
+                self.sprites[kindName].createHurtSprite();
+            });
+        },
+    
+        initSilhouettes: function() {
+            var self = this;
+
+            Types.forEachMobOrNpcKind(function(kind, kindName) {
+                self.sprites[kindName].createSilhouette();
+            });
+            self.sprites["chest"].createSilhouette();
+            self.sprites["item-cake"].createSilhouette();
+        },
+    
+        initAchievements: function() {
+            var self = this;
+        
+            this.achievements = {
+                A_TRUE_WARRIOR: {
+                    id: 1,
+                    name: "A True Warrior",
+                    desc: "Find a new weapon"
+                },
+                INTO_THE_WILD: {
+                    id: 2,
+                    name: "Into the Wild",
+                    desc: "Venture outside the village"
+                },
+                ANGRY_RATS: {
+                    id: 3,
+                    name: "Angry Rats",
+                    desc: "Kill 10 rats",
+                    isCompleted: function() {
+                        return self.storage.getRatCount() >= 10;
+                    }
+                },
+                SMALL_TALK: {
+                    id: 4,
+                    name: "Small Talk",
+                    desc: "Talk to a non-player character"
+                },
+                FAT_LOOT: {
+                    id: 5,
+                    name: "Fat Loot",
+                    desc: "Get a new armor set"
+                },
+                UNDERGROUND: {
+                    id: 6,
+                    name: "Underground",
+                    desc: "Explore at least one cave"
+                },
+                AT_WORLDS_END: {
+                    id: 7,
+                    name: "At World's End",
+                    desc: "Reach the south shore"
+                },
+                COWARD: {
+                    id: 8,
+                    name: "Coward",
+                    desc: "Successfully escape an enemy"
+                },
+                TOMB_RAIDER: {
+                    id: 9,
+                    name: "Tomb Raider",
+                    desc: "Find the graveyard"
+                },
+                SKULL_COLLECTOR: {
+                    id: 10,
+                    name: "Skull Collector",
+                    desc: "Kill 10 skeletons",
+                    isCompleted: function() {
+                        return self.storage.getSkeletonCount() >= 10;
+                    }
+                },
+                NINJA_LOOT: {
+                    id: 11,
+                    name: "Ninja Loot",
+                    desc: "Get hold of an item you didn't fight for"
+                },
+                NO_MANS_LAND: {
+                    id: 12,
+                    name: "No Man's Land",
+                    desc: "Travel through the desert"
+                },
+                HUNTER: {
+                    id: 13,
+                    name: "Hunter",
+                    desc: "Kill 50 enemies",
+                    isCompleted: function() {
+                        return self.storage.getTotalKills() >= 50;
+                    }
+                },
+                STILL_ALIVE: {
+                    id: 14,
+                    name: "Still Alive",
+                    desc: "Revive your character five times",
+                    isCompleted: function() {
+                        return self.storage.getTotalRevives() >= 5;
+                    }
+                },
+                MEATSHIELD: {
+                    id: 15,
+                    name: "Meatshield",
+                    desc: "Take 5,000 points of damage",
+                    isCompleted: function() {
+                        return self.storage.getTotalDamageTaken() >= 5000;
+                    }
+                },
+                HOT_SPOT: {
+                    id: 16,
+                    name: "Hot Spot",
+                    desc: "Enter the volcanic mountains"
+                },
+                HERO: {
+                    id: 17,
+                    name: "Hero",
+                    desc: "Defeat the final boss"
+                },
+                FOXY: {
+                    id: 18,
+                    name: "Foxy",
+                    desc: "Find the Firefox costume",
+                    hidden: true
+                },
+                FOR_SCIENCE: {
+                    id: 19,
+                    name: "For Science",
+                    desc: "Enter into a portal",
+                    hidden: true
+                },
+                RICKROLLD: {
+                    id: 20,
+                    name: "Rickroll'd",
+                    desc: "Take some singing lessons",
+                    hidden: true
+                }
+            };
+        
+            _.each(this.achievements, function(obj) {
+                if(!obj.isCompleted) {
+                    obj.isCompleted = function() { return true; }
+                }
+                if(!obj.hidden) {
+                    obj.hidden = false;
+                }
+            });
+        
+            this.app.initAchievementList(this.achievements);
+        
+            if(this.storage.hasAlreadyPlayed()) {
+                this.app.initUnlockedAchievements(this.storage.data.achievements.unlocked);
+            }
+        },
+    
+        getAchievementById: function(id) {
+            var found = null;
+            _.each(this.achievements, function(achievement, key) {
+                if(achievement.id === parseInt(id)) {
+                    found = achievement;
+                }
+            });
+            return found;
+        },
+    
+        loadSprite: function(name) {
+            if(this.renderer.upscaledRendering) {
+                this.spritesets[0][name] = new Sprite(name, 1);
+            } else {
+                this.spritesets[1][name] = new Sprite(name, 2);
+                if(!this.renderer.mobile && !this.renderer.tablet) {
+                    this.spritesets[2][name] = new Sprite(name, 3);
+                }
+            }
+        },
+    
+        setSpriteScale: function(scale) {
+            var self = this;
+            
+            if(this.renderer.upscaledRendering) {
+                this.sprites = this.spritesets[0];
+            } else {
+                this.sprites = this.spritesets[scale - 1];
+                
+                _.each(this.entities, function(entity) {
+                    entity.sprite = null;
+                    entity.setSprite(self.sprites[entity.getSpriteName()]);
+                });
+                this.initHurtSprites();
+                this.initShadows();
+                this.initCursors();
+            }
+        },
+    
+        loadSprites: function() {
+            log.info("Loading sprites...");
+            this.spritesets = [];
+            this.spritesets[0] = {};
+            this.spritesets[1] = {};
+            this.spritesets[2] = {};
+            _.map(this.spriteNames, this.loadSprite, this);
+        },
+    
+        spritesLoaded: function() {
+            if(_.any(this.sprites, function(sprite) { return !sprite.isLoaded; })) {
+                return false;
+            }
+            return true;
+        },
+    
+        setCursor: function(name, orientation) {
+            if(name in this.cursors) {
+                this.currentCursor = this.cursors[name];
+                this.currentCursorOrientation = orientation;
+            } else {
+                log.error("Unknown cursor name :"+name);
+            }
+        },
+    
+        updateCursorLogic: function() {
+            if(this.hoveringCollidingTile && this.started) {
+                this.targetColor = "rgba(255, 50, 50, 0.5)";
+            }
+            else {
+                this.targetColor = "rgba(255, 255, 255, 0.5)";
+            }
+        
+            if(this.hoveringMob && this.started) {
+                this.setCursor("sword");
+                this.hoveringTarget = false;
+                this.targetCellVisible = false;
+            }
+            else if(this.hoveringNpc && this.started) {
+                this.setCursor("talk");
+                this.hoveringTarget = false;
+                this.targetCellVisible = false;
+            }
+            else if((this.hoveringItem || this.hoveringChest) && this.started) {
+                this.setCursor("loot");
+                this.hoveringTarget = false;
+                this.targetCellVisible = true;
+            }
+            else {
+                this.setCursor("hand");
+                this.hoveringTarget = false;
+                this.targetCellVisible = true;
+            }
+        },
+    
+        focusPlayer: function() {
+            this.renderer.camera.lookAt(this.player);
+        },
+
+        addEntity: function(entity) {
+            var self = this;
+            
+            if(this.entities[entity.id] === undefined) {
+                this.entities[entity.id] = entity;
+                this.registerEntityPosition(entity);
+                
+                if(!(entity instanceof Item && entity.wasDropped)
+                && !(this.renderer.mobile || this.renderer.tablet)) {
+                    entity.fadeIn(this.currentTime);
+                }
+                
+                if(this.renderer.mobile || this.renderer.tablet) {
+                    entity.onDirty(function(e) {
+                        if(self.camera.isVisible(e)) {
+                            e.dirtyRect = self.renderer.getEntityBoundingRect(e);
+                            self.checkOtherDirtyRects(e.dirtyRect, e, e.gridX, e.gridY);
+                        }
+                    });
+                }
+            }
+            else {
+                log.error("This entity already exists : " + entity.id + " ("+entity.kind+")");
+            }
+        },
+
+        removeEntity: function(entity) {
+            if(entity.id in this.entities) {
+                this.unregisterEntityPosition(entity);
+                delete this.entities[entity.id];
+            }
+            else {
+                log.error("Cannot remove entity. Unknown ID : " + entity.id);
+            }
+        },
+    
+        addItem: function(item, x, y) {
+            item.setSprite(this.sprites[item.getSpriteName()]);
+            item.setGridPosition(x, y);
+            item.setAnimation("idle", 150);
+            this.addEntity(item);
+        },
+    
+        removeItem: function(item) {
+            if(item) {
+                this.removeFromItemGrid(item, item.gridX, item.gridY);
+                this.removeFromRenderingGrid(item, item.gridX, item.gridY);
+                delete this.entities[item.id];
+            } else {
+                log.error("Cannot remove item. Unknown ID : " + item.id);
+            }
+        },
+    
+        initPathingGrid: function() {
+            this.pathingGrid = [];
+            for(var i=0; i < this.map.height; i += 1) {
+                this.pathingGrid[i] = [];
+                for(var j=0; j < this.map.width; j += 1) {
+                    this.pathingGrid[i][j] = this.map.grid[i][j];
+                }
+            }
+            log.info("Initialized the pathing grid with static colliding cells.");
+        },
+    
+        initEntityGrid: function() {
+            this.entityGrid = [];
+            for(var i=0; i < this.map.height; i += 1) {
+                this.entityGrid[i] = [];
+                for(var j=0; j < this.map.width; j += 1) {
+                    this.entityGrid[i][j] = {};
+                }
+            }
+            log.info("Initialized the entity grid.");
+        },
+    
+        initRenderingGrid: function() {
+            this.renderingGrid = [];
+            for(var i=0; i < this.map.height; i += 1) {
+                this.renderingGrid[i] = [];
+                for(var j=0; j < this.map.width; j += 1) {
+                    this.renderingGrid[i][j] = {};
+                }
+            }
+            log.info("Initialized the rendering grid.");
+        },
+    
+        initItemGrid: function() {
+            this.itemGrid = [];
+            for(var i=0; i < this.map.height; i += 1) {
+                this.itemGrid[i] = [];
+                for(var j=0; j < this.map.width; j += 1) {
+                    this.itemGrid[i][j] = {};
+                }
+            }
+            log.info("Initialized the item grid.");
+        },
+    
+        /**
+         * 
+         */
+        initAnimatedTiles: function() {
+            var self = this,
+                m = this.map;
+
+            this.animatedTiles = [];
+            this.forEachVisibleTile(function (id, index) {
+                if(m.isAnimatedTile(id)) {
+                    var tile = new AnimatedTile(id, m.getTileAnimationLength(id), m.getTileAnimationDelay(id), index),
+                        pos = self.map.tileIndexToGridPosition(tile.index);
+                    
+                    tile.x = pos.x;
+                    tile.y = pos.y;
+                    self.animatedTiles.push(tile);
+                }
+            }, 1);
+            //log.info("Initialized animated tiles.");
+        },
+    
+        addToRenderingGrid: function(entity, x, y) {
+            if(!this.map.isOutOfBounds(x, y)) {
+                this.renderingGrid[y][x][entity.id] = entity;
+            }
+        },
+    
+        removeFromRenderingGrid: function(entity, x, y) {
+            if(entity && this.renderingGrid[y][x] && entity.id in this.renderingGrid[y][x]) {
+                delete this.renderingGrid[y][x][entity.id];
+            }
+        },
+    
+        removeFromEntityGrid: function(entity, x, y) {
+            if(this.entityGrid[y][x][entity.id]) {
+                delete this.entityGrid[y][x][entity.id];
+            }
+        },
+        
+        removeFromItemGrid: function(item, x, y) {
+            if(item && this.itemGrid[y][x][item.id]) {
+                delete this.itemGrid[y][x][item.id];
+            }
+        },
+    
+        removeFromPathingGrid: function(x, y) {
+            this.pathingGrid[y][x] = 0;
+        },
+    
+        /**
+         * Registers the entity at two adjacent positions on the grid at the same time.
+         * This situation is temporary and should only occur when the entity is moving.
+         * This is useful for the hit testing algorithm used when hovering entities with the mouse cursor.
+         *
+         * @param {Entity} entity The moving entity
+         */
+        registerEntityDualPosition: function(entity) {
+            if(entity) {
+                this.entityGrid[entity.gridY][entity.gridX][entity.id] = entity;
+            
+                this.addToRenderingGrid(entity, entity.gridX, entity.gridY);
+            
+                if(entity.nextGridX >= 0 && entity.nextGridY >= 0) {
+                    this.entityGrid[entity.nextGridY][entity.nextGridX][entity.id] = entity;
+                    if(!(entity instanceof Player)) {
+                        this.pathingGrid[entity.nextGridY][entity.nextGridX] = 1;
+                    }
+                }
+            }
+        },
+    
+        /**
+         * Clears the position(s) of this entity in the entity grid.
+         *
+         * @param {Entity} entity The moving entity
+         */
+        unregisterEntityPosition: function(entity) {
+            if(entity) {
+                this.removeFromEntityGrid(entity, entity.gridX, entity.gridY);
+                this.removeFromPathingGrid(entity.gridX, entity.gridY);
+            
+                this.removeFromRenderingGrid(entity, entity.gridX, entity.gridY);
+            
+                if(entity.nextGridX >= 0 && entity.nextGridY >= 0) {
+                    this.removeFromEntityGrid(entity, entity.nextGridX, entity.nextGridY);
+                    this.removeFromPathingGrid(entity.nextGridX, entity.nextGridY);
+                }
+            }
+        },
+    
+        registerEntityPosition: function(entity) {
+            var x = entity.gridX,
+                y = entity.gridY;
+        
+            if(entity) {
+                if(entity instanceof Character || entity instanceof Chest) {
+                    this.entityGrid[y][x][entity.id] = entity;
+                    if(!(entity instanceof Player)) {
+                        this.pathingGrid[y][x] = 1;
+                    }
+                }
+                if(entity instanceof Item) {
+                    this.itemGrid[y][x][entity.id] = entity;
+                }
+            
+                this.addToRenderingGrid(entity, x, y);
+            }
+        },
+    
+        setServerOptions: function(host, port, username) {
+            this.host = host;
+            this.port = port;
+            this.username = username;
+        },
+    
+        loadAudio: function() {
+            this.audioManager = new AudioManager(this);
+        },
+    
+        initMusicAreas: function() {
+            var self = this;
+            _.each(this.map.musicAreas, function(area) {
+                self.audioManager.addArea(area.x, area.y, area.w, area.h, area.id);
+            });
+        },
+
+        run: function(started_callback) {
+            var self = this;
+        
+            this.loadSprites();
+            this.setUpdater(new Updater(this));
+            this.camera = this.renderer.camera;
+        
+            this.setSpriteScale(this.renderer.scale);
+        
+            var wait = setInterval(function() {
+                if(self.map.isLoaded && self.spritesLoaded()) {
+                    self.ready = true;
+                    log.debug('All sprites loaded.');
+                            
+                    self.loadAudio();
+                    
+                    self.initMusicAreas();
+                    self.initAchievements();
+                    self.initCursors();
+                    self.initAnimations();
+                    self.initShadows();
+                    self.initHurtSprites();
+                
+                    if(!self.renderer.mobile
+                    && !self.renderer.tablet 
+                    && self.renderer.upscaledRendering) {
+                        self.initSilhouettes();
+                    }
+            
+                    self.initEntityGrid();
+                    self.initItemGrid();
+                    self.initPathingGrid();
+                    self.initRenderingGrid();
+                
+                    self.setPathfinder(new Pathfinder(self.map.width, self.map.height));
+            
+                    self.initPlayer();
+                    self.setCursor("hand");
+                    
+                    self.connect(started_callback);
+                
+                    clearInterval(wait);
+                }
+            }, 100);
+        },
+    
+        tick: function() {
+            this.currentTime = new Date().getTime();
+
+            if(this.started) {
+                this.updateCursorLogic();
+                this.updater.update();
+                this.renderer.renderFrame();
+            }
+
+            if(!this.isStopped) {
+                requestAnimFrame(this.tick.bind(this));
+            }
+        },
+
+        start: function() {
+            this.tick();
+            this.hasNeverStarted = false;
+            log.info("Game loop started.");
+        },
+
+        stop: function() {
+            log.info("Game stopped.");
+            this.isStopped = true;
+        },
+    
+        entityIdExists: function(id) {
+            return id in this.entities;
+        },
+
+        getEntityById: function(id) {
+            if(id in this.entities) {
+                return this.entities[id];
+            }
+            else {
+                log.error("Unknown entity id : " + id, true);
+            }
+        },
+
+        connect: function(started_callback) {
+            var self = this,
+                connecting = false; // always in dispatcher mode in the build version
+    
+            this.client = new GameClient(this.host, this.port);
+            
+            //>>excludeStart("prodHost", pragmas.prodHost);
+            var config = this.app.config.local || this.app.config.dev;
+            if(config) {
+                this.client.connect(config.dispatcher); // false if the client connects directly to a game server
+                connecting = true;
+            }
+            //>>excludeEnd("prodHost");
+            
+            //>>includeStart("prodHost", pragmas.prodHost);
+            if(!connecting) {
+                this.client.connect(true); // always use the dispatcher in production
+            }
+            //>>includeEnd("prodHost");
+            
+            this.client.onDispatched(function(host, port) {
+                log.debug("Dispatched to game server "+host+ ":"+port);
+                
+                self.client.host = host;
+                self.client.port = port;
+                self.client.connect(); // connect to actual game server
+            });
+            
+            this.client.onConnected(function() {
+                log.info("Starting client/server handshake");
+                
+                self.player.name = self.username;
+                self.started = true;
+            
+                self.sendHello(self.player);
+            });
+        
+            this.client.onEntityList(function(list) {
+                var entityIds = _.pluck(self.entities, 'id'),
+                    knownIds = _.intersection(entityIds, list),
+                    newIds = _.difference(list, knownIds);
+            
+                self.obsoleteEntities = _.reject(self.entities, function(entity) {
+                    return _.include(knownIds, entity.id) || entity.id === self.player.id;
+                });
+            
+                // Destroy entities outside of the player's zone group
+                self.removeObsoleteEntities();
+                
+                // Ask the server for spawn information about unknown entities
+                if(_.size(newIds) > 0) {
+                    self.client.sendWho(newIds);
+                }
+            });
+        
+            this.client.onWelcome(function(id, name, x, y, hp) {
+                log.info("Received player ID from server : "+ id);
+                self.player.id = id;
+                self.playerId = id;
+                // Always accept name received from the server which will
+                // sanitize and shorten names exceeding the allowed length.
+                self.player.name = name;
+                self.player.setGridPosition(x, y);
+                self.player.setMaxHitPoints(hp);
+            
+                self.updateBars();
+                self.resetCamera();
+                self.updatePlateauMode();
+                self.audioManager.updateMusic();
+            
+                self.addEntity(self.player);
+                self.player.dirtyRect = self.renderer.getEntityBoundingRect(self.player);
+
+                setTimeout(function() {
+                    self.tryUnlockingAchievement("STILL_ALIVE");
+                }, 1500);
+            
+                if(!self.storage.hasAlreadyPlayed()) {
+                    self.storage.initPlayer(self.player.name);
+                    self.storage.savePlayer(self.renderer.getPlayerImage(),
+                                            self.player.getSpriteName(),
+                                            self.player.getWeaponName());
+                    self.showNotification("Welcome to BrowserQuest!");
+                } else {
+                    self.showNotification("Welcome back to BrowserQuest!");
+                    self.storage.setPlayerName(name);
+                }
+        
+                self.player.onStartPathing(function(path) {
+                    var i = path.length - 1,
+                        x =  path[i][0],
+                        y =  path[i][1];
+                
+                    if(self.player.isMovingToLoot()) {
+                        self.player.isLootMoving = false;
+                    }
+                    else if(!self.player.isAttacking()) {
+                        self.client.sendMove(x, y);
+                    }
+                
+                    // Target cursor position
+                    self.selectedX = x;
+                    self.selectedY = y;
+                    self.selectedCellVisible = true;
+
+                    if(self.renderer.mobile || self.renderer.tablet) {
+                        self.drawTarget = true;
+                        self.clearTarget = true;
+                        self.renderer.targetRect = self.renderer.getTargetBoundingRect();
+                        self.checkOtherDirtyRects(self.renderer.targetRect, null, self.selectedX, self.selectedY);
+                    }
+                });
+                
+                self.player.onCheckAggro(function() {
+                    self.forEachMob(function(mob) {
+                        if(mob.isAggressive && !mob.isAttacking() && self.player.isNear(mob, mob.aggroRange)) {
+                            self.player.aggro(mob);
+                        }
+                    });
+                });
+            
+                self.player.onAggro(function(mob) {
+                    if(!mob.isWaitingToAttack(self.player) && !self.player.isAttackedBy(mob)) {
+                        self.player.log_info("Aggroed by " + mob.id + " at ("+self.player.gridX+", "+self.player.gridY+")");
+                        self.client.sendAggro(mob);
+                        mob.waitToAttack(self.player);
+                    }
+                });
+
+                self.player.onBeforeStep(function() {
+                    var blockingEntity = self.getEntityAt(self.player.nextGridX, self.player.nextGridY);
+                    if(blockingEntity && blockingEntity.id !== self.playerId) {
+                        log.debug("Blocked by " + blockingEntity.id);
+                    }
+                    self.unregisterEntityPosition(self.player);
+                });
+            
+                self.player.onStep(function() {
+                    if(self.player.hasNextStep()) {
+                        self.registerEntityDualPosition(self.player);
+                    }
+                
+                    if(self.isZoningTile(self.player.gridX, self.player.gridY)) {
+                        self.enqueueZoningFrom(self.player.gridX, self.player.gridY);
+                    }
+                
+                    self.player.forEachAttacker(function(attacker) {
+                        if(attacker.isAdjacent(attacker.target)) {
+                            attacker.lookAtTarget();
+                        } else {
+                            attacker.follow(self.player);
+                        }
+                    });
+                
+                    if((self.player.gridX <= 85 && self.player.gridY <= 179 && self.player.gridY > 178) || (self.player.gridX <= 85 && self.player.gridY <= 266 && self.player.gridY > 265)) {
+                        self.tryUnlockingAchievement("INTO_THE_WILD");
+                    }
+                    
+                    if(self.player.gridX <= 85 && self.player.gridY <= 293 && self.player.gridY > 292) {
+                        self.tryUnlockingAchievement("AT_WORLDS_END");
+                    }
+                    
+                    if(self.player.gridX <= 85 && self.player.gridY <= 100 && self.player.gridY > 99) {
+                        self.tryUnlockingAchievement("NO_MANS_LAND");
+                    }
+                    
+                    if(self.player.gridX <= 85 && self.player.gridY <= 51 && self.player.gridY > 50) {
+                        self.tryUnlockingAchievement("HOT_SPOT");
+                    }
+                    
+                    if(self.player.gridX <= 27 && self.player.gridY <= 123 && self.player.gridY > 112) {
+                        self.tryUnlockingAchievement("TOMB_RAIDER");
+                    }
+                
+                    self.updatePlayerCheckpoint();
+                
+                    if(!self.player.isDead) {
+                        self.audioManager.updateMusic();
+                    }
+                });
+            
+                self.player.onStopPathing(function(x, y) {
+                    if(self.player.hasTarget()) {
+                        self.player.lookAtTarget();
+                    }
+                
+                    self.selectedCellVisible = false;
+                
+                    if(self.isItemAt(x, y)) {
+                        var item = self.getItemAt(x, y);
+                    
+                        try {
+                            self.player.loot(item);
+                            self.client.sendLoot(item); // Notify the server that this item has been looted
+                            self.removeItem(item);
+                            self.showNotification(item.getLootMessage());
+                        
+                            if(item.type === "armor") {
+                                self.tryUnlockingAchievement("FAT_LOOT");
+                            }
+                            
+                            if(item.type === "weapon") {
+                                self.tryUnlockingAchievement("A_TRUE_WARRIOR");
+                            }
+
+                            if(item.kind === Types.Entities.CAKE) {
+                                self.tryUnlockingAchievement("FOR_SCIENCE");
+                            }
+                            
+                            if(item.kind === Types.Entities.FIREPOTION) {
+                                self.tryUnlockingAchievement("FOXY");
+                                self.audioManager.playSound("firefox");
+                            }
+                        
+                            if(Types.isHealingItem(item.kind)) {
+                                self.audioManager.playSound("heal");
+                            } else {
+                                self.audioManager.playSound("loot");
+                            }
+                            
+                            if(item.wasDropped && !_(item.playersInvolved).include(self.playerId)) {
+                                self.tryUnlockingAchievement("NINJA_LOOT");
+                            }
+                        } catch(e) {
+                            if(e instanceof Exceptions.LootException) {
+                                self.showNotification(e.message);
+                                self.audioManager.playSound("noloot");
+                            } else {
+                                throw e;
+                            }
+                        }
+                    }
+                
+                    if(!self.player.hasTarget() && self.map.isDoor(x, y)) {
+                        var dest = self.map.getDoorDestination(x, y);
+                    
+                        self.player.setGridPosition(dest.x, dest.y);
+                        self.player.nextGridX = dest.x;
+                        self.player.nextGridY = dest.y;
+                        self.player.turnTo(dest.orientation);
+                        self.client.sendTeleport(dest.x, dest.y);
+                        
+                        if(self.renderer.mobile && dest.cameraX && dest.cameraY) {
+                            self.camera.setGridPosition(dest.cameraX, dest.cameraY);
+                            self.resetZone();
+                        } else {
+                            if(dest.portal) {
+                                self.assignBubbleTo(self.player);
+                            } else {
+                                self.camera.focusEntity(self.player);
+                                self.resetZone();
+                            }
+                        }
+                        
+                        if(_.size(self.player.attackers) > 0) {
+                            setTimeout(function() { self.tryUnlockingAchievement("COWARD"); }, 500);
+                        }
+                        self.player.forEachAttacker(function(attacker) {
+                            attacker.disengage();
+                            attacker.idle();
+                        });
+                    
+                        self.updatePlateauMode();
+                        
+                        self.checkUndergroundAchievement();
+                        
+                        if(self.renderer.mobile || self.renderer.tablet) {
+                            // When rendering with dirty rects, clear the whole screen when entering a door.
+                            self.renderer.clearScreen(self.renderer.context);
+                        }
+                        
+                        if(dest.portal) {
+                            self.audioManager.playSound("teleport");
+                        }
+                        
+                        if(!self.player.isDead) {
+                            self.audioManager.updateMusic();
+                        }
+                    }
+                
+                    if(self.player.target instanceof Npc) {
+                        self.makeNpcTalk(self.player.target);
+                    } else if(self.player.target instanceof Chest) {
+                        self.client.sendOpen(self.player.target);
+                        self.audioManager.playSound("chest");
+                    }
+                    
+                    self.player.forEachAttacker(function(attacker) {
+                        if(!attacker.isAdjacentNonDiagonal(self.player)) {
+                            attacker.follow(self.player);
+                        }
+                    });
+                
+                    self.unregisterEntityPosition(self.player);
+                    self.registerEntityPosition(self.player);
+                });
+            
+                self.player.onRequestPath(function(x, y) {
+                    var ignored = [self.player]; // Always ignore self
+                
+                    if(self.player.hasTarget()) {
+                        ignored.push(self.player.target);
+                    }
+                    return self.findPath(self.player, x, y, ignored);
+                });
+            
+                self.player.onDeath(function() {
+                    log.info(self.playerId + " is dead");
+                
+                    self.player.stopBlinking();
+                    self.player.setSprite(self.sprites["death"]);
+                    self.player.animate("death", 120, 1, function() {
+                        log.info(self.playerId + " was removed");
+                    
+                        self.removeEntity(self.player);
+                        self.removeFromRenderingGrid(self.player, self.player.gridX, self.player.gridY);
+                    
+                        self.player = null;
+                        self.client.disable();
+                    
+                        setTimeout(function() {
+                            self.playerdeath_callback();
+                        }, 1000);
+                    });
+                
+                    self.player.forEachAttacker(function(attacker) {
+                        attacker.disengage();
+                        attacker.idle();
+                    });
+                
+                    self.audioManager.fadeOutCurrentMusic();
+                    self.audioManager.playSound("death");
+                });
+            
+                self.player.onHasMoved(function(player) {
+                    self.assignBubbleTo(player);
+                });
+                
+                self.player.onArmorLoot(function(armorName) {
+                    self.player.switchArmor(self.sprites[armorName]);
+                });
+            
+                self.player.onSwitchItem(function() {
+                    self.storage.savePlayer(self.renderer.getPlayerImage(),
+                                            self.player.getArmorName(),
+                                            self.player.getWeaponName());
+                    if(self.equipment_callback) {
+                        self.equipment_callback();
+                    }
+                });
+                
+                self.player.onInvincible(function() {
+                    self.invincible_callback();
+                    self.player.switchArmor(self.sprites["firefox"]);
+                });
+            
+                self.client.onSpawnItem(function(item, x, y) {
+                    log.info("Spawned " + Types.getKindAsString(item.kind) + " (" + item.id + ") at "+x+", "+y);
+                    self.addItem(item, x, y);
+                });
+            
+                self.client.onSpawnChest(function(chest, x, y) {
+                    log.info("Spawned chest (" + chest.id + ") at "+x+", "+y);
+                    chest.setSprite(self.sprites[chest.getSpriteName()]);
+                    chest.setGridPosition(x, y);
+                    chest.setAnimation("idle_down", 150);
+                    self.addEntity(chest, x, y);
+                
+                    chest.onOpen(function() {
+                        chest.stopBlinking();
+                        chest.setSprite(self.sprites["death"]);
+                        chest.setAnimation("death", 120, 1, function() {
+                            log.info(chest.id + " was removed");
+                            self.removeEntity(chest);
+                            self.removeFromRenderingGrid(chest, chest.gridX, chest.gridY);
+                            self.previousClickPosition = {};
+                        });
+                    });
+                });
+            
+                self.client.onSpawnCharacter(function(entity, x, y, orientation, targetId) {
+                    if(!self.entityIdExists(entity.id)) {
+                        try {
+                            if(entity.id !== self.playerId) {
+                                entity.setSprite(self.sprites[entity.getSpriteName()]);
+                                entity.setGridPosition(x, y);
+                                entity.setOrientation(orientation);
+                                entity.idle();
+
+                                self.addEntity(entity);
+                        
+                                log.debug("Spawned " + Types.getKindAsString(entity.kind) + " (" + entity.id + ") at "+entity.gridX+", "+entity.gridY);
+                        
+                                if(entity instanceof Character) {
+                                    entity.onBeforeStep(function() {
+                                        self.unregisterEntityPosition(entity);
+                                    });
+
+                                    entity.onStep(function() {
+                                        if(!entity.isDying) {
+                                            self.registerEntityDualPosition(entity);
+
+                                            entity.forEachAttacker(function(attacker) {
+                                                if(attacker.isAdjacent(attacker.target)) {
+                                                    attacker.lookAtTarget();
+                                                } else {
+                                                    attacker.follow(entity);
+                                                }
+                                            });
+                                        }
+                                    });
+
+                                    entity.onStopPathing(function(x, y) {
+                                        if(!entity.isDying) {
+                                            if(entity.hasTarget() && entity.isAdjacent(entity.target)) {
+                                                entity.lookAtTarget();
+                                            }
+                                
+                                            if(entity instanceof Player) {
+                                                var gridX = entity.destination.gridX,
+                                                    gridY = entity.destination.gridY;
+
+                                                if(self.map.isDoor(gridX, gridY)) {
+                                                    var dest = self.map.getDoorDestination(gridX, gridY);
+                                                    entity.setGridPosition(dest.x, dest.y);
+                                                }
+                                            }
+                                        
+                                            entity.forEachAttacker(function(attacker) {
+                                                if(!attacker.isAdjacentNonDiagonal(entity) && attacker.id !== self.playerId) {
+                                                    attacker.follow(entity);
+                                                }
+                                            });
+                                
+                                            self.unregisterEntityPosition(entity);
+                                            self.registerEntityPosition(entity);
+                                        }
+                                    });
+
+                                    entity.onRequestPath(function(x, y) {
+                                        var ignored = [entity], // Always ignore self
+                                            ignoreTarget = function(target) {
+                                                ignored.push(target);
+
+                                                // also ignore other attackers of the target entity
+                                                target.forEachAttacker(function(attacker) {
+                                                    ignored.push(attacker);
+                                                });
+                                            };
+                                        
+                                        if(entity.hasTarget()) {
+                                            ignoreTarget(entity.target);
+                                        } else if(entity.previousTarget) {
+                                            // If repositioning before attacking again, ignore previous target
+                                            // See: tryMovingToADifferentTile()
+                                            ignoreTarget(entity.previousTarget);
+                                        }
+                                        
+                                        return self.findPath(entity, x, y, ignored);
+                                    });
+
+                                    entity.onDeath(function() {
+                                        log.info(entity.id + " is dead");
+                                
+                                        if(entity instanceof Mob) {
+                                            // Keep track of where mobs die in order to spawn their dropped items
+                                            // at the right position later.
+                                            self.deathpositions[entity.id] = {x: entity.gridX, y: entity.gridY};
+                                        }
+
+                                        entity.isDying = true;
+                                        entity.setSprite(self.sprites[entity instanceof Mobs.Rat ? "rat" : "death"]);
+                                        entity.animate("death", 120, 1, function() {
+                                            log.info(entity.id + " was removed");
+
+                                            self.removeEntity(entity);
+                                            self.removeFromRenderingGrid(entity, entity.gridX, entity.gridY);
+                                        });
+
+                                        entity.forEachAttacker(function(attacker) {
+                                            attacker.disengage();
+                                        });
+                                        
+                                        if(self.player.target && self.player.target.id === entity.id) {
+                                            self.player.disengage();
+                                        }
+                                    
+                                        // Upon death, this entity is removed from both grids, allowing the player
+                                        // to click very fast in order to loot the dropped item and not be blocked.
+                                        // The entity is completely removed only after the death animation has ended.
+                                        self.removeFromEntityGrid(entity, entity.gridX, entity.gridY);
+                                        self.removeFromPathingGrid(entity.gridX, entity.gridY);
+                                    
+                                        if(self.camera.isVisible(entity)) {
+                                            self.audioManager.playSound("kill"+Math.floor(Math.random()*2+1));
+                                        }
+                                    
+                                        self.updateCursor();
+                                    });
+
+                                    entity.onHasMoved(function(entity) {
+                                        self.assignBubbleTo(entity); // Make chat bubbles follow moving entities
+                                    });
+
+                                    if(entity instanceof Mob) {
+                                        if(targetId) {
+                                            var player = self.getEntityById(targetId);
+                                            if(player) {
+                                                self.createAttackLink(entity, player);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch(e) {
+                            log.error(e);
+                        }
+                    } else {
+                        log.debug("Character "+entity.id+" already exists. Don't respawn.");
+                    }
+                });
+
+                self.client.onDespawnEntity(function(entityId) {
+                    var entity = self.getEntityById(entityId);
+            
+                    if(entity) {
+                        log.info("Despawning " + Types.getKindAsString(entity.kind) + " (" + entity.id+ ")");
+                        
+                        if(entity.gridX === self.previousClickPosition.x
+                        && entity.gridY === self.previousClickPosition.y) {
+                            self.previousClickPosition = {};
+                        }
+                        
+                        if(entity instanceof Item) {
+                            self.removeItem(entity);
+                        } else if(entity instanceof Character) {
+                            entity.forEachAttacker(function(attacker) {
+                                if(attacker.canReachTarget()) {
+                                    attacker.hit();
+                                }
+                            });
+                            entity.die();
+                        } else if(entity instanceof Chest) {
+                            entity.open();
+                        }
+                        
+                        entity.clean();
+                    }
+                });
+            
+                self.client.onItemBlink(function(id) {
+                    var item = self.getEntityById(id);
+
+                    if(item) {
+                        item.blink(150);
+                    }
+                });
+
+                self.client.onEntityMove(function(id, x, y) {
+                    var entity = null;
+
+                    if(id !== self.playerId) {
+                        entity = self.getEntityById(id);
+                
+                        if(entity) {
+                            if(self.player.isAttackedBy(entity)) {
+                                self.tryUnlockingAchievement("COWARD");
+                            }
+                            entity.disengage();
+                            entity.idle();
+                            self.makeCharacterGoTo(entity, x, y);
+                        }
+                    }
+                });
+            
+                self.client.onEntityDestroy(function(id) {
+                    var entity = self.getEntityById(id);
+                    if(entity) {
+                        if(entity instanceof Item) {
+                            self.removeItem(entity);
+                        } else {
+                            self.removeEntity(entity);
+                        }
+                        log.debug("Entity was destroyed: "+entity.id);
+                    }
+                });
+            
+                self.client.onPlayerMoveToItem(function(playerId, itemId) {
+                    var player, item;
+
+                    if(playerId !== self.playerId) {
+                        player = self.getEntityById(playerId);
+                        item = self.getEntityById(itemId);
+                
+                        if(player && item) {
+                            self.makeCharacterGoTo(player, item.gridX, item.gridY);
+                        }
+                    }
+                });
+            
+                self.client.onEntityAttack(function(attackerId, targetId) {
+                    var attacker = self.getEntityById(attackerId),
+                        target = self.getEntityById(targetId);
+                
+                    if(attacker && target && attacker.id !== self.playerId) {
+                        log.debug(attacker.id + " attacks " + target.id);
+                        
+                        if(attacker && target instanceof Player && target.id !== self.playerId && target.target && target.target.id === attacker.id && attacker.getDistanceToEntity(target) < 3) {
+                            setTimeout(function() {
+                                self.createAttackLink(attacker, target);
+                            }, 200); // delay to prevent other players attacking mobs from ending up on the same tile as they walk towards each other.
+                        } else {
+                            self.createAttackLink(attacker, target);
+                        }
+                    }
+                });
+            
+                self.client.onPlayerDamageMob(function(mobId, points) {
+                    var mob = self.getEntityById(mobId);
+                    if(mob && points) {
+                        self.infoManager.addDamageInfo(points, mob.x, mob.y - 15, "inflicted");
+                    }
+                });
+            
+                self.client.onPlayerKillMob(function(kind) {
+                    var mobName = Types.getKindAsString(kind);
+                    
+                    if(mobName === 'skeleton2') {
+                        mobName = 'greater skeleton';
+                    }
+                    
+                    if(mobName === 'eye') {
+                        mobName = 'evil eye';
+                    }
+                    
+                    if(mobName === 'deathknight') {
+                        mobName = 'death knight';
+                    }
+                    
+                    if(mobName === 'boss') {
+                        self.showNotification("You killed the skeleton king");
+                    } else {
+                        if(_.include(['a', 'e', 'i', 'o', 'u'], mobName[0])) {
+                            self.showNotification("You killed an " + mobName);
+                        } else {
+                            self.showNotification("You killed a " + mobName);
+                        }
+                    }
+                    
+                    self.storage.incrementTotalKills();
+                    self.tryUnlockingAchievement("HUNTER");
+
+                    if(kind === Types.Entities.RAT) {
+                        self.storage.incrementRatCount();
+                        self.tryUnlockingAchievement("ANGRY_RATS");
+                    }
+                    
+                    if(kind === Types.Entities.SKELETON || kind === Types.Entities.SKELETON2) {
+                        self.storage.incrementSkeletonCount();
+                        self.tryUnlockingAchievement("SKULL_COLLECTOR");
+                    }
+
+                    if(kind === Types.Entities.BOSS) {
+                        self.tryUnlockingAchievement("HERO");
+                    }
+                });
+            
+                self.client.onPlayerChangeHealth(function(points, isRegen) {
+                    var player = self.player,
+                        diff,
+                        isHurt;
+                
+                    if(player && !player.isDead && !player.invincible) {
+                        isHurt = points <= player.hitPoints;
+                        diff = points - player.hitPoints;
+                        player.hitPoints = points;
+
+                        if(player.hitPoints <= 0) {
+                            player.die();
+                        }
+                        if(isHurt) {
+                            player.hurt();
+                            self.infoManager.addDamageInfo(diff, player.x, player.y - 15, "received");
+                            self.audioManager.playSound("hurt");
+                            self.storage.addDamage(-diff);
+                            self.tryUnlockingAchievement("MEATSHIELD");
+                            if(self.playerhurt_callback) {
+                                self.playerhurt_callback();
+                            }
+                        } else if(!isRegen){
+                            self.infoManager.addDamageInfo("+"+diff, player.x, player.y - 15, "healed");
+                        }
+                        self.updateBars();
+                    }
+                });
+            
+                self.client.onPlayerChangeMaxHitPoints(function(hp) {
+                    self.player.maxHitPoints = hp;
+                    self.player.hitPoints = hp;
+                    self.updateBars();
+                });
+            
+                self.client.onPlayerEquipItem(function(playerId, itemKind) {
+                    var player = self.getEntityById(playerId),
+                        itemName = Types.getKindAsString(itemKind);
+                
+                    if(player) {
+                        if(Types.isArmor(itemKind)) {
+                            player.setSprite(self.sprites[itemName]);
+                        } else if(Types.isWeapon(itemKind)) {
+                            player.setWeaponName(itemName);
+                        }
+                    }
+                });
+            
+                self.client.onPlayerTeleport(function(id, x, y) {
+                    var entity = null,
+                        currentOrientation;
+
+                    if(id !== self.playerId) {
+                        entity = self.getEntityById(id);
+                
+                        if(entity) {
+                            currentOrientation = entity.orientation;
+                        
+                            self.makeCharacterTeleportTo(entity, x, y);
+                            entity.setOrientation(currentOrientation);
+                        
+                            entity.forEachAttacker(function(attacker) {
+                                attacker.disengage();
+                                attacker.idle();
+                                attacker.stop();
+                            });
+                        }
+                    }
+                });
+            
+                self.client.onDropItem(function(item, mobId) {
+                    var pos = self.getDeadMobPosition(mobId);
+                
+                    if(pos) {
+                        self.addItem(item, pos.x, pos.y);
+                        self.updateCursor();
+                    }
+                });
+            
+                self.client.onChatMessage(function(entityId, message) {
+                    var entity = self.getEntityById(entityId);
+                    self.createBubble(entityId, message);
+                    self.assignBubbleTo(entity);
+                    self.audioManager.playSound("chat");
+                });
+            
+                self.client.onPopulationChange(function(worldPlayers, totalPlayers) {
+                    if(self.nbplayers_callback) {
+                        self.nbplayers_callback(worldPlayers, totalPlayers);
+                    }
+                });
+                
+                self.client.onDisconnected(function(message) {
+                    if(self.player) {
+                        self.player.die();
+                    }
+                    if(self.disconnect_callback) {
+                        self.disconnect_callback(message);
+                    }
+                });
+            
+                self.gamestart_callback();
+            
+                if(self.hasNeverStarted) {
+                    self.start();
+                    started_callback();
+                }
+            });
+        },
+
+        /**
+         * Links two entities in an attacker<-->target relationship.
+         * This is just a utility method to wrap a set of instructions.
+         *
+         * @param {Entity} attacker The attacker entity
+         * @param {Entity} target The target entity
+         */
+        createAttackLink: function(attacker, target) {
+            if(attacker.hasTarget()) {
+                attacker.removeTarget();
+            }
+            attacker.engage(target);
+            
+            if(attacker.id !== this.playerId) {
+                target.addAttacker(attacker);
+            }
+        },
+
+        /**
+         * Sends a "hello" message to the server, as a way of initiating the player connection handshake.
+         * @see GameClient.sendHello
+         */
+        sendHello: function() {
+            this.client.sendHello(this.player);
+        },
+
+        /**
+         * Converts the current mouse position on the screen to world grid coordinates.
+         * @returns {Object} An object containing x and y properties.
+         */
+        getMouseGridPosition: function() {
+            var mx = this.mouse.x,
+                my = this.mouse.y,
+                c = this.renderer.camera,
+                s = this.renderer.scale,
+                ts = this.renderer.tilesize,
+                offsetX = mx % (ts * s),
+                offsetY = my % (ts * s),
+                x = ((mx - offsetX) / (ts * s)) + c.gridX,
+                y = ((my - offsetY) / (ts * s)) + c.gridY;
+        
+                return { x: x, y: y };
+        },
+    
+        /**
+         * Moves a character to a given location on the world grid.
+         *
+         * @param {Number} x The x coordinate of the target location.
+         * @param {Number} y The y coordinate of the target location.
+         */
+        makeCharacterGoTo: function(character, x, y) {
+            if(!this.map.isOutOfBounds(x, y)) {
+                character.go(x, y);
+            }
+        },
+    
+        /**
+         *
+         */
+        makeCharacterTeleportTo: function(character, x, y) {
+            if(!this.map.isOutOfBounds(x, y)) {
+                this.unregisterEntityPosition(character);
+
+                character.setGridPosition(x, y);
+                
+                this.registerEntityPosition(character);
+                this.assignBubbleTo(character);
+            } else {
+                log.debug("Teleport out of bounds: "+x+", "+y);
+            }
+        },
+
+        /**
+         * Moves the current player to a given target location.
+         * @see makeCharacterGoTo
+         */
+        makePlayerGoTo: function(x, y) {
+            this.makeCharacterGoTo(this.player, x, y);
+        },
+    
+        /**
+         * Moves the current player towards a specific item.
+         * @see makeCharacterGoTo
+         */
+        makePlayerGoToItem: function(item) {
+            if(item) {
+                this.player.isLootMoving = true;
+                this.makePlayerGoTo(item.gridX, item.gridY);
+                this.client.sendLootMove(item, item.gridX, item.gridY);
+            }
+        },
+    
+        /**
+         *
+         */
+        makePlayerTalkTo: function(npc) {
+            if(npc) {
+                this.player.setTarget(npc);
+                this.player.follow(npc);
+            }
+        },
+    
+        makePlayerOpenChest: function(chest) {
+            if(chest) {
+                this.player.setTarget(chest);
+                this.player.follow(chest);
+            }
+        },
+    
+        /**
+         * 
+         */
+        makePlayerAttack: function(mob) {
+            this.createAttackLink(this.player, mob);
+            this.client.sendAttack(mob);
+        },
+    
+        /**
+         *
+         */
+        makeNpcTalk: function(npc) {
+            var msg;
+        
+            if(npc) {
+                msg = npc.talk();
+                this.previousClickPosition = {};
+                if(msg) {
+                    this.createBubble(npc.id, msg);
+                    this.assignBubbleTo(npc);
+                    this.audioManager.playSound("npc");
+                } else {
+                    this.destroyBubble(npc.id);
+                    this.audioManager.playSound("npc-end");
+                }
+                this.tryUnlockingAchievement("SMALL_TALK");
+                
+                if(npc.kind === Types.Entities.RICK) {
+                    this.tryUnlockingAchievement("RICKROLLD");
+                }
+            }
+        },
+
+        /**
+         * Loops through all the entities currently present in the game.
+         * @param {Function} callback The function to call back (must accept one entity argument).
+         */
+        forEachEntity: function(callback) {
+            _.each(this.entities, function(entity) {
+                callback(entity);
+            });
+        },
+    
+        /**
+         * Same as forEachEntity but only for instances of the Mob subclass.
+         * @see forEachEntity
+         */
+        forEachMob: function(callback) {
+            _.each(this.entities, function(entity) {
+                if(entity instanceof Mob) {
+                    callback(entity);
+                }
+            });
+        },
+    
+        /**
+         * Loops through all entities visible by the camera and sorted by depth :
+         * Lower 'y' value means higher depth.
+         * Note: This is used by the Renderer to know in which order to render entities.
+         */
+        forEachVisibleEntityByDepth: function(callback) {
+            var self = this,
+                m = this.map;
+        
+            this.camera.forEachVisiblePosition(function(x, y) {
+                if(!m.isOutOfBounds(x, y)) {
+                    if(self.renderingGrid[y][x]) {
+                        _.each(self.renderingGrid[y][x], function(entity) {
+                            callback(entity);
+                        });
+                    }
+                }
+            }, this.renderer.mobile ? 0 : 2);
+        },
+    
+        /**
+         * 
+         */    
+        forEachVisibleTileIndex: function(callback, extra) {
+            var m = this.map;
+        
+            this.camera.forEachVisiblePosition(function(x, y) {
+                if(!m.isOutOfBounds(x, y)) {
+                    callback(m.GridPositionToTileIndex(x, y) - 1);
+                }
+            }, extra);
+        },
+    
+        /**
+         * 
+         */
+        forEachVisibleTile: function(callback, extra) {
+            var self = this,
+                m = this.map;
+        
+            if(m.isLoaded) {
+                this.forEachVisibleTileIndex(function(tileIndex) {
+                    if(_.isArray(m.data[tileIndex])) {
+                        _.each(m.data[tileIndex], function(id) {
+                            callback(id-1, tileIndex);
+                        });
+                    }
+                    else {
+                        if(_.isNaN(m.data[tileIndex]-1)) {
+                            //throw Error("Tile number for index:"+tileIndex+" is NaN");
+                        } else {
+                            callback(m.data[tileIndex]-1, tileIndex);
+                        }
+                    }
+                }, extra);
+            }
+        },
+    
+        /**
+         * 
+         */
+        forEachAnimatedTile: function(callback) {
+            if(this.animatedTiles) {
+                _.each(this.animatedTiles, function(tile) {
+                    callback(tile);
+                });
+            }
+        },
+    
+        /**
+         * Returns the entity located at the given position on the world grid.
+         * @returns {Entity} the entity located at (x, y) or null if there is none.
+         */
+        getEntityAt: function(x, y) {
+            if(this.map.isOutOfBounds(x, y) || !this.entityGrid) {
+                return null;
+            }
+            
+            var entities = this.entityGrid[y][x],
+                entity = null;
+            if(_.size(entities) > 0) {
+                entity = entities[_.keys(entities)[0]];
+            } else {
+                entity = this.getItemAt(x, y);
+            }
+            return entity;
+        },
+
+        getMobAt: function(x, y) {
+            var entity = this.getEntityAt(x, y);
+            if(entity && (entity instanceof Mob)) {
+                return entity;
+            }
+            return null;
+        },
+
+        getNpcAt: function(x, y) {
+            var entity = this.getEntityAt(x, y);
+            if(entity && (entity instanceof Npc)) {
+                return entity;
+            }
+            return null;
+        },
+
+        getChestAt: function(x, y) {
+            var entity = this.getEntityAt(x, y);
+            if(entity && (entity instanceof Chest)) {
+                return entity;
+            }
+            return null;
+        },
+
+        getItemAt: function(x, y) {
+            if(this.map.isOutOfBounds(x, y) || !this.itemGrid) {
+                return null;
+            }
+            var items = this.itemGrid[y][x],
+                item = null;
+
+            if(_.size(items) > 0) {
+                // If there are potions/burgers stacked with equipment items on the same tile, always get expendable items first.
+                _.each(items, function(i) {
+                    if(Types.isExpendableItem(i.kind)) {
+                        item = i;
+                    };
+                });
+
+                // Else, get the first item of the stack
+                if(!item) {
+                    item = items[_.keys(items)[0]];
+                }
+            }
+            return item;
+        },
+    
+        /**
+         * Returns true if an entity is located at the given position on the world grid.
+         * @returns {Boolean} Whether an entity is at (x, y).
+         */
+        isEntityAt: function(x, y) {
+            return !_.isNull(this.getEntityAt(x, y));
+        },
+
+        isMobAt: function(x, y) {
+            return !_.isNull(this.getMobAt(x, y));
+        },
+
+        isItemAt: function(x, y) {
+            return !_.isNull(this.getItemAt(x, y));
+        },
+
+        isNpcAt: function(x, y) {
+            return !_.isNull(this.getNpcAt(x, y));
+        },
+
+        isChestAt: function(x, y) {
+            return !_.isNull(this.getChestAt(x, y));
+        },
+
+        /**
+         * Finds a path to a grid position for the specified character.
+         * The path will pass through any entity present in the ignore list.
+         */
+        findPath: function(character, x, y, ignoreList) {
+            var self = this,
+                grid = this.pathingGrid;
+                path = [],
+                isPlayer = (character === this.player);
+        
+            if(this.map.isColliding(x, y)) {
+                return path;
+            }
+        
+            if(this.pathfinder && character) {
+                if(ignoreList) {
+                    _.each(ignoreList, function(entity) {
+                        self.pathfinder.ignoreEntity(entity);
+                    });
+                }
+            
+                path = this.pathfinder.findPath(grid, character, x, y, false);
+            
+                if(ignoreList) {
+                    this.pathfinder.clearIgnoreList();
+                }
+            } else {
+                log.error("Error while finding the path to "+x+", "+y+" for "+character.id);
+            }
+            return path;
+        },
+    
+        /**
+         * Toggles the visibility of the pathing grid for debugging purposes.
+         */
+        togglePathingGrid: function() {
+            if(this.debugPathing) {
+                this.debugPathing = false;
+            } else {
+                this.debugPathing = true;
+            }
+        },
+    
+        /**
+         * Toggles the visibility of the FPS counter and other debugging info.
+         */
+        toggleDebugInfo: function() {
+            if(this.renderer && this.renderer.isDebugInfoVisible) {
+                this.renderer.isDebugInfoVisible = false;
+            } else {
+                this.renderer.isDebugInfoVisible = true;
+            }
+        },
+    
+        /**
+         * 
+         */
+        movecursor: function() {
+            var mouse = this.getMouseGridPosition(),
+                x = mouse.x,
+                y = mouse.y;
+
+            if(this.player && !this.renderer.mobile && !this.renderer.tablet) {
+                this.hoveringCollidingTile = this.map.isColliding(x, y);
+                this.hoveringPlateauTile = this.player.isOnPlateau ? !this.map.isPlateau(x, y) : this.map.isPlateau(x, y);
+                this.hoveringMob = this.isMobAt(x, y);
+                this.hoveringItem = this.isItemAt(x, y);
+                this.hoveringNpc = this.isNpcAt(x, y);
+                this.hoveringChest = this.isChestAt(x, y);
+        
+                if(this.hoveringMob || this.hoveringNpc || this.hoveringChest) {
+                    var entity = this.getEntityAt(x, y);
+            
+                    if(!entity.isHighlighted && this.renderer.supportsSilhouettes) {
+                        if(this.lastHovered) {
+                            this.lastHovered.setHighlight(false);
+                        }
+                        this.lastHovered = entity;
+                        entity.setHighlight(true);
+                    }
+                }
+                else if(this.lastHovered) {
+                    this.lastHovered.setHighlight(false);
+                    this.lastHovered = null;
+                }
+            }
+        },
+    
+        /**
+         * Processes game logic when the user triggers a click/touch event during the game.
+         */
+        click: function() {
+            var pos = this.getMouseGridPosition(),
+                entity;
+            
+            if(pos.x === this.previousClickPosition.x
+            && pos.y === this.previousClickPosition.y) {
+                return;
+            } else {
+                this.previousClickPosition = pos;
+            }
+            
+            if(this.started
+            && this.player
+            && !this.isZoning()
+            && !this.isZoningTile(this.player.nextGridX, this.player.nextGridY)
+            && !this.player.isDead
+            && !this.hoveringCollidingTile
+            && !this.hoveringPlateauTile) {
+                entity = this.getEntityAt(pos.x, pos.y);
+            
+                if(entity instanceof Mob) {
+                    this.makePlayerAttack(entity);
+                }
+                else if(entity instanceof Item) {
+                    this.makePlayerGoToItem(entity);
+                }
+                else if(entity instanceof Npc) {
+                    if(this.player.isAdjacentNonDiagonal(entity) === false) {
+                        this.makePlayerTalkTo(entity);
+                    } else {
+                        this.makeNpcTalk(entity);
+                    }
+                }
+                else if(entity instanceof Chest) {
+                    this.makePlayerOpenChest(entity);
+                }
+                else {
+                    this.makePlayerGoTo(pos.x, pos.y);
+                }
+            }
+        },
+        
+        isMobOnSameTile: function(mob, x, y) {
+            var X = x || mob.gridX,
+                Y = y || mob.gridY,
+                list = this.entityGrid[Y][X],
+                result = false;
+            
+            _.each(list, function(entity) {
+                if(entity instanceof Mob && entity.id !== mob.id) {
+                    result = true;
+                }
+            });
+            return result;
+        },
+        
+        getFreeAdjacentNonDiagonalPosition: function(entity) {
+            var self = this,
+                result = null;
+            
+            entity.forEachAdjacentNonDiagonalPosition(function(x, y, orientation) {
+                if(!result && !self.map.isColliding(x, y) && !self.isMobAt(x, y)) {
+                    result = {x: x, y: y, o: orientation};
+                }
+            });
+            return result;
+        },
+        
+        tryMovingToADifferentTile: function(character) {
+            var attacker = character,
+                target = character.target;
+            
+            if(attacker && target && target instanceof Player) {
+                if(!target.isMoving() && attacker.getDistanceToEntity(target) === 0) {
+                    var pos;
+                    
+                    switch(target.orientation) {
+                        case Types.Orientations.UP:
+                            pos = {x: target.gridX, y: target.gridY - 1, o: target.orientation}; break;
+                        case Types.Orientations.DOWN:
+                            pos = {x: target.gridX, y: target.gridY + 1, o: target.orientation}; break;
+                        case Types.Orientations.LEFT:
+                            pos = {x: target.gridX - 1, y: target.gridY, o: target.orientation}; break;
+                        case Types.Orientations.RIGHT:
+                            pos = {x: target.gridX + 1, y: target.gridY, o: target.orientation}; break;
+                    }
+                    
+                    if(pos) {
+                        attacker.previousTarget = target;
+                        attacker.disengage();
+                        attacker.idle();
+                        this.makeCharacterGoTo(attacker, pos.x, pos.y);
+                        target.adjacentTiles[pos.o] = true;
+                        
+                        return true;
+                    }
+                }
+            
+                if(!target.isMoving() && attacker.isAdjacentNonDiagonal(target) && this.isMobOnSameTile(attacker)) {
+                    var pos = this.getFreeAdjacentNonDiagonalPosition(target);
+            
+                    // avoid stacking mobs on the same tile next to a player
+                    // by making them go to adjacent tiles if they are available
+                    if(pos && !target.adjacentTiles[pos.o]) {
+                        if(this.player.target && attacker.id === this.player.target.id) {
+                            return false; // never unstack the player's target
+                        }
+                        
+                        attacker.previousTarget = target;
+                        attacker.disengage();
+                        attacker.idle();
+                        this.makeCharacterGoTo(attacker, pos.x, pos.y);
+                        target.adjacentTiles[pos.o] = true;
+                        
+                        return true;
+                    }
+                }
+            }
+            return false;
+        },
+    
+        /**
+         * 
+         */
+        onCharacterUpdate: function(character) {
+            var time = this.currentTime,
+                self = this;
+            
+            // If mob has finished moving to a different tile in order to avoid stacking, attack again from the new position.
+            if(character.previousTarget && !character.isMoving() && character instanceof Mob) {
+                var t = character.previousTarget;
+                
+                if(this.getEntityById(t.id)) { // does it still exist?
+                    character.previousTarget = null;
+                    this.createAttackLink(character, t);
+                    return;
+                }
+            }
+        
+            if(character.isAttacking() && !character.previousTarget) {
+                var isMoving = this.tryMovingToADifferentTile(character); // Don't let multiple mobs stack on the same tile when attacking a player.
+                
+                if(character.canAttack(time)) {
+                    if(!isMoving) { // don't hit target if moving to a different tile.
+                        if(character.hasTarget() && character.getOrientationTo(character.target) !== character.orientation) {
+                            character.lookAtTarget();
+                        }
+                        
+                        character.hit();
+                        
+                        if(character.id === this.playerId) {
+                            this.client.sendHit(character.target);
+                        }
+                        
+                        if(character instanceof Player && this.camera.isVisible(character)) {
+                            this.audioManager.playSound("hit"+Math.floor(Math.random()*2+1));
+                        }
+                        
+                        if(character.hasTarget() && character.target.id === this.playerId && this.player && !this.player.invincible) {
+                            this.client.sendHurt(character);
+                        }
+                    }
+                } else {
+                    if(character.hasTarget()
+                    && character.isDiagonallyAdjacent(character.target)
+                    && character.target instanceof Player
+                    && !character.target.isMoving()) {
+                        character.follow(character.target);
+                    }
+                }
+            }
+        },
+    
+        /**
+         * 
+         */
+        isZoningTile: function(x, y) {
+            var c = this.camera;
+        
+            x = x - c.gridX;
+            y = y - c.gridY;
+            
+            if(x === 0 || y === 0 || x === c.gridW-1 || y === c.gridH-1) {
+                return true;
+            }
+            return false;
+        },
+    
+        /**
+         * 
+         */
+        getZoningOrientation: function(x, y) {
+            var orientation = "",
+                c = this.camera;
+
+            x = x - c.gridX;
+            y = y - c.gridY;
+       
+            if(x === 0) {
+                orientation = Types.Orientations.LEFT;
+            }
+            else if(y === 0) {
+                orientation = Types.Orientations.UP;
+            }
+            else if(x === c.gridW-1) {
+                orientation = Types.Orientations.RIGHT;
+            }
+            else if(y === c.gridH-1) {
+                orientation = Types.Orientations.DOWN;
+            }
+        
+            return orientation;
+        },
+    
+        startZoningFrom: function(x, y) {
+            this.zoningOrientation = this.getZoningOrientation(x, y);
+        
+            if(this.renderer.mobile || this.renderer.tablet) {
+                var z = this.zoningOrientation,
+                    c = this.camera,
+                    ts = this.renderer.tilesize,
+                    x = c.x,
+                    y = c.y,
+                    xoffset = (c.gridW - 2) * ts,
+                    yoffset = (c.gridH - 2) * ts;
+            
+                if(z === Types.Orientations.LEFT || z === Types.Orientations.RIGHT) {
+                    x = (z === Types.Orientations.LEFT) ? c.x - xoffset : c.x + xoffset;
+                } else if(z === Types.Orientations.UP || z === Types.Orientations.DOWN) {
+                    y = (z === Types.Orientations.UP) ? c.y - yoffset : c.y + yoffset;
+                }
+                c.setPosition(x, y);
+            
+                this.renderer.clearScreen(this.renderer.context);
+                this.endZoning();
+                
+                // Force immediate drawing of all visible entities in the new zone
+                this.forEachVisibleEntityByDepth(function(entity) {
+                    entity.setDirty();
+                });
+            }
+            else {
+                this.currentZoning = new Transition();
+            }
+            this.bubbleManager.clean();
+            this.client.sendZone();
+        },
+        
+        enqueueZoningFrom: function(x, y) {
+            this.zoningQueue.push({x: x, y: y});
+            
+            if(this.zoningQueue.length === 1) {
+                this.startZoningFrom(x, y);
+            }
+        },
+    
+        endZoning: function() {
+            this.currentZoning = null;
+            this.resetZone();
+            this.zoningQueue.shift();
+            
+            if(this.zoningQueue.length > 0) {
+                var pos = this.zoningQueue[0];
+                this.startZoningFrom(pos.x, pos.y);
+            }
+        },
+    
+        isZoning: function() {
+            return !_.isNull(this.currentZoning);
+        },
+    
+        resetZone: function() {
+            this.bubbleManager.clean();
+            this.initAnimatedTiles();
+            this.renderer.renderStaticCanvases();
+        },
+    
+        resetCamera: function() {
+            this.camera.focusEntity(this.player);
+            this.resetZone();
+        },
+    
+        say: function(message) {
+            this.client.sendChat(message);
+        },
+    
+        createBubble: function(id, message) {
+            this.bubbleManager.create(id, message, this.currentTime);
+        },
+    
+        destroyBubble: function(id) {
+            this.bubbleManager.destroyBubble(id);
+        },
+    
+        assignBubbleTo: function(character) {
+            var bubble = this.bubbleManager.getBubbleById(character.id);
+        
+            if(bubble) {
+                var s = this.renderer.scale,
+                    t = 16 * s, // tile size
+                    x = ((character.x - this.camera.x) * s),
+                    w = parseInt(bubble.element.css('width')) + 24,
+                    offset = (w / 2) - (t / 2),
+                    offsetY,
+                    y;
+            
+                if(character instanceof Npc) {
+                    offsetY = 0;
+                } else {
+                    if(s === 2) {
+                        if(this.renderer.mobile) {
+                            offsetY = 0;
+                        } else {
+                            offsetY = 15;
+                        }
+                    } else {
+                        offsetY = 12;
+                    }
+                }
+            
+                y = ((character.y - this.camera.y) * s) - (t * 2) - offsetY;
+            
+                bubble.element.css('left', x - offset + 'px');
+                bubble.element.css('top', y + 'px');
+            }
+        },
+    
+        restart: function() {
+            log.debug("Beginning restart");
+        
+            this.entities = {};
+            this.initEntityGrid();
+            this.initPathingGrid();
+            this.initRenderingGrid();
+
+            this.player = new Warrior("player", this.username);
+            this.initPlayer();
+        
+            this.started = true;
+            this.client.enable();
+            this.sendHello(this.player);
+        
+            this.storage.incrementRevives();
+            
+            if(this.renderer.mobile || this.renderer.tablet) {
+                this.renderer.clearScreen(this.renderer.context);
+            }
+        
+            log.debug("Finished restart");
+        },
+    
+        onGameStart: function(callback) {
+            this.gamestart_callback = callback;
+        },
+        
+        onDisconnect: function(callback) {
+            this.disconnect_callback = callback;
+        },
+    
+        onPlayerDeath: function(callback) {
+            this.playerdeath_callback = callback;
+        },
+    
+        onPlayerHealthChange: function(callback) {
+            this.playerhp_callback = callback;
+        },
+    
+        onPlayerHurt: function(callback) {
+            this.playerhurt_callback = callback;
+        },
+    
+        onPlayerEquipmentChange: function(callback) {
+            this.equipment_callback = callback;
+        },
+
+        onNbPlayersChange: function(callback) {
+            this.nbplayers_callback = callback;
+        },
+    
+        onNotification: function(callback) {
+            this.notification_callback = callback;
+        },
+    
+        onPlayerInvincible: function(callback) {
+            this.invincible_callback = callback
+        },
+    
+        resize: function() {
+            var x = this.camera.x,
+                y = this.camera.y,
+                currentScale = this.renderer.scale,
+                newScale = this.renderer.getScaleFactor();
+    
+                this.renderer.rescale(newScale);
+                this.camera = this.renderer.camera;
+                this.camera.setPosition(x, y);
+
+                this.renderer.renderStaticCanvases();
+        },
+    
+        updateBars: function() {
+            if(this.player && this.playerhp_callback) {
+                this.playerhp_callback(this.player.hitPoints, this.player.maxHitPoints);
+            }
+        },
+    
+        getDeadMobPosition: function(mobId) {
+            var position;
+
+            if(mobId in this.deathpositions) {
+                position = this.deathpositions[mobId];
+                delete this.deathpositions[mobId];
+            }
+        
+            return position;
+        },
+    
+        onAchievementUnlock: function(callback) {
+            this.unlock_callback = callback;
+        },
+    
+        tryUnlockingAchievement: function(name) {
+            var achievement = null;
+            if(name in this.achievements) {
+                achievement = this.achievements[name];
+            
+                if(achievement.isCompleted() && this.storage.unlockAchievement(achievement.id)) {
+                    if(this.unlock_callback) {
+                        this.unlock_callback(achievement.id, achievement.name, achievement.desc);
+                        this.audioManager.playSound("achievement");
+                    }
+                }
+            }
+        },
+    
+        showNotification: function(message) {
+            if(this.notification_callback) {
+                this.notification_callback(message);
+            }
+        },
+
+        removeObsoleteEntities: function() {
+            var nb = _.size(this.obsoleteEntities),
+                self = this;
+        
+            if(nb > 0) {
+                _.each(this.obsoleteEntities, function(entity) {
+                    if(entity.id != self.player.id) { // never remove yourself
+                        self.removeEntity(entity);
+                    }
+                });
+                log.debug("Removed "+nb+" entities: "+_.pluck(_.reject(this.obsoleteEntities, function(id) { return id === self.player.id }), 'id'));
+                this.obsoleteEntities = null;
+            }
+        },
+    
+        /**
+         * Fake a mouse move event in order to update the cursor.
+         *
+         * For instance, to get rid of the sword cursor in case the mouse is still hovering over a dying mob.
+         * Also useful when the mouse is hovering a tile where an item is appearing.
+         */
+        updateCursor: function() {
+            this.movecursor();
+            this.updateCursorLogic();
+        },
+    
+        /**
+         * Change player plateau mode when necessary
+         */
+        updatePlateauMode: function() {
+            if(this.map.isPlateau(this.player.gridX, this.player.gridY)) {
+                this.player.isOnPlateau = true;
+            } else {
+                this.player.isOnPlateau = false;
+            }
+        },
+    
+        updatePlayerCheckpoint: function() {
+            var checkpoint = this.map.getCurrentCheckpoint(this.player);
+        
+            if(checkpoint) {
+                var lastCheckpoint = this.player.lastCheckpoint;
+                if(!lastCheckpoint || (lastCheckpoint && lastCheckpoint.id !== checkpoint.id)) {
+                    this.player.lastCheckpoint = checkpoint;
+                    this.client.sendCheck(checkpoint.id);
+                }
+            }
+        },
+        
+        checkUndergroundAchievement: function() {
+            var music = this.audioManager.getSurroundingMusic(this.player);
+
+            if(music) {
+                if(music.name === 'cave') {
+                    this.tryUnlockingAchievement("UNDERGROUND");
+                }
+            }
+        },
+        
+        forEachEntityAround: function(x, y, r, callback) {
+            for(var i = x-r, max_i = x+r; i <= max_i; i += 1) {
+                for(var j = y-r, max_j = y+r; j <= max_j; j += 1) {
+                    if(!this.map.isOutOfBounds(i, j)) {
+                        _.each(this.renderingGrid[j][i], function(entity) {
+                            callback(entity);
+                        });
+                    }
+                }
+            }
+        },
+        
+        checkOtherDirtyRects: function(r1, source, x, y) {
+            var r = this.renderer;
+            
+            this.forEachEntityAround(x, y, 2, function(e2) {
+                if(source && source.id && e2.id === source.id) {
+                    return;
+                }
+                if(!e2.isDirty) {
+                    var r2 = r.getEntityBoundingRect(e2);
+                    if(r.isIntersecting(r1, r2)) {
+                        e2.setDirty();
+                    }
+                }
+            });
+            
+            if(source && !(source.hasOwnProperty("index"))) {
+                this.forEachAnimatedTile(function(tile) {
+                    if(!tile.isDirty) {
+                        var r2 = r.getTileBoundingRect(tile);
+                        if(r.isIntersecting(r1, r2)) {
+                            tile.isDirty = true;
+                        }
+                    }
+                });
+            }
+            
+            if(!this.drawTarget && this.selectedCellVisible) {
+                var targetRect = r.getTargetBoundingRect();
+                if(r.isIntersecting(r1, targetRect)) {
+                    this.drawTarget = true;
+                    this.renderer.targetRect = targetRect;
+                }
+            }
+        }
+    });
+    
+    return Game;
+});

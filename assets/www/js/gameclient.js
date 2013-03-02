@@ -55,7 +55,7 @@ define(['player', 'entityfactory', 'lib/bison'], function(Player, EntityFactory,
             } else {
                 this.connection = new WebSocket(url);
             }
-            
+
             if(dispatcherMode) {
                 this.connection.onmessage = function(e) {
                     var reply = JSON.parse(e.data);
