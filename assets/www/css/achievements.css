@@ -4,7 +4,6 @@
 #achievements-count {float:right;color:#fff;}
 #achievements-count div {display:inline-block;}
 #achievement-notification .coin {-moz-transition:0.2s opacity linear;-webkit-transition:0.2s opacity linear;-o-transition:0.2s opacity linear;-ms-transition:0.2s opacity linear;transition:0.2s opacity linear;}
-
 @media screen and (min-width: 1501px) {
     .coin {width:72px;height:78px;}
     .achievement1 .coin {background-position:0 -666px;}
@@ -27,7 +26,6 @@
     .achievement18 .coin {background-position:-648px -822px;}
     .achievement19 .coin {background-position:-720px -822px;}
     .achievement20 .coin {background-position:-792px -822px;}
-
     #achievements-wrapper {height:387px;width:1116px;margin:60px 0 30px 60px;}
     #achievements ul {float:left;margin-left:60px;}
     #achievements nav {height:66px;width:202px;margin:0 auto;}
@@ -38,7 +36,6 @@
     #previous:active, .upscaled #previous:active {background-position:-402px -846px;}
     #next, .upscaled #next {margin-left:-15px;background-position:-300px -846px;}
     #next:active, .upscaled #next:active {background-position:-501px -846px;}
-
     .page1 #previous:hover, .page1 #previous:active {background-position:0px -846px;}
     .page5 #next:hover, .page5 #next:active {background-position:-99px -846px}
     
@@ -70,7 +67,6 @@
     #achievement-notification .title {color:#fce045;font-size:20px;margin:27px 0 9px 0;}
     #achievement-notification .name {color:#eee;font-size:30px;margin:9px 0;}
 }
-
 @media screen and (max-width: 1500px) {
     .coin {width:48px;height:52px;}
     .achievement1 .coin {background-position:0 -444px;}
@@ -93,7 +89,6 @@
     .achievement18 .coin {background-position:-432px -548px;}
     .achievement19 .coin {background-position:-480px -548px;}
     .achievement20 .coin {background-position:-528px -548px;}
-
     #achievements-wrapper {height:258px;width:744px;margin:40px 0 20px 40px;}
     #achievements ul {float:left;margin-left:40px;}
     #achievements nav {height:44px;width:134px;margin:0 auto;}
@@ -136,7 +131,6 @@
     #achievement-notification .title {color:#fce045;font-size:14px;margin:18px 0 6px 0;}
     #achievement-notification .name {color:#eee;font-size:20px;margin:6px 0;}
 }
-
 @media screen and (max-height: 850px) {
     .coin {width:48px;height:52px;}
     .achievement1 .coin {background-position:0 -444px;}
@@ -159,7 +153,6 @@
     .achievement18 .coin {background-position:-432px -548px;}
     .achievement19 .coin {background-position:-480px -548px;}
     .achievement20 .coin {background-position:-528px -548px;}
-
     #achievements-wrapper {height:258px;width:744px;margin:40px 0 20px 40px;}
     #achievements ul {float:left;margin-left:40px;}
     #achievements nav {height:44px;width:135px;margin:0 auto;}
@@ -202,7 +195,6 @@
     #achievement-notification .title {color:#fce045;font-size:14px;margin:18px 0 6px 0;}
     #achievement-notification .name {color:#eee;font-size:20px;margin:6px 0;}
 }
-
 @media screen and (max-width: 1000px) {
     .coin {width:24px;height:26px;}
     .achievement1 .coin {background-position:0 -222px;}
@@ -259,7 +251,6 @@
     .achievement-sharing .facebook:hover {background-position:-372px -207px;}
     .achievement-sharing .twitter, .upscaled .achievement-sharing .twitter {height:11px;width:16px;background-position:-377px -196px;margin-left:5px;}
     .achievement-sharing .twitter:hover, .upscaled .achievement-sharing .twitter:hover {background-position:-377px -207px;}
-
     #achievement-notification, .upscaled #achievement-notification {width:216px;bottom:22px;height:0;margin-left:-108px;background-position:0 -248px;}
     #achievement-notification.active {height:34px;}
     #achievement-notification .coin {position:absolute;top:-20px;left:50%;margin-left:-12px;opacity:0;}
@@ -268,7 +259,6 @@
     #achievement-notification .title {color:#fce045;font-size:10px;margin:9px 0 3px 0;}
     #achievement-notification .name {color:#eee;font-size:10px;margin:3px 0;}
 }
-
 @media screen and (max-width: 600px) {
     #achievement-notification .coin {width:48px;height:52px;}
     #achievement-notification.achievement1 .coin {background-position:0 -444px;}

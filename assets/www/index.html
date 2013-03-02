@@ -41,6 +41,13 @@ Mozilla presents an HTML5 mini-MMORPG by Little Workshop http://www.littleworksh
                 </script>
         <![endif]-->
         <script src="js/detect.js" type="text/javascript"></script>
+        <script>
+        document.addEventListener('deviceready', function () {
+            document.addEventListener('backbutton', function () {
+                    window.location = 'index.html';
+            }, true);
+        }, false);
+        </script>
         <title>BrowserQuest</title>
     </head>
     <!--[if lt IE 9]>
@@ -52,7 +59,6 @@ Mozilla presents an HTML5 mini-MMORPG by Little Workshop http://www.littleworksh
                You need to enable JavaScript to play BrowserQuest.
            </div>
         </noscript>
-        <a href="">Reload</a>
         <a id="moztab" class="clickable" target="_blank" href="http://www.mozilla.org/"></a>
         <div id="intro">
             <h1 id="logo">

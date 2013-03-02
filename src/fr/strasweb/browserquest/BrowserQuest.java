@@ -21,7 +21,6 @@ package fr.strasweb.browserquest;
 
 import android.os.Bundle;
 import org.apache.cordova.*;
-import com.strumsoft.websocket.phonegap.WebSocketFactory;
 
 public class BrowserQuest extends DroidGap
 {
@@ -32,9 +31,6 @@ public class BrowserQuest extends DroidGap
         // Set by <content src="index.html" /> in config.xml
         super.loadUrl(Config.getStartUrl());
         //super.loadUrl("file:///android_asset/www/index.html")
-        
-        // attach websocket factory
-        appView.addJavascriptInterface(new WebSocketFactory(appView), "WebSocketFactory");
     }
 }
 

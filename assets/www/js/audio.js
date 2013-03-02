@@ -67,10 +67,18 @@ define(['area'], function(Area) {
     
         load: function (basePath, name, loaded_callback, channels) {
             var path = basePath + name + "." + this.extension,
-                sound = document.createElement('audio'),
+                sound = new Media('file:///android_asset/www/' + path, function() {
+                    log.debug(path + " is ready to play.");
+                    if(loaded_callback) {
+                        loaded_callback();
+                    }
+                }, function (error) {
+                    log.error("Error: "+ path +" could not be loaded.");
+                    self.sounds[name] = null;
+                }),
                 self = this;
             
-            sound.addEventListener('canplaythrough', function (e) {
+            /*sound.addEventListener('canplaythrough', function (e) {
                 this.removeEventListener('canplaythrough', arguments.callee, false);
                 log.debug(path + " is ready to play.");
                 if(loaded_callback) {
@@ -80,16 +88,16 @@ define(['area'], function(Area) {
             sound.addEventListener('error', function (e) {
                 log.error("Error: "+ path +" could not be loaded.");
                 self.sounds[name] = null;
-            }, false);
+            }, false);*/
         
-            sound.preload = "auto";
+            /*sound.preload = "auto";
             sound.autobuffer = true;
             sound.src = path;
-            sound.load();
+            sound.load();*/
         
             this.sounds[name] = [sound];
             _.times(channels - 1, function() {
-                self.sounds[name].push(sound.cloneNode(true));
+                self.sounds[name].push(sound);
             });
         },
     
@@ -101,7 +109,7 @@ define(['area'], function(Area) {
             this.load("audio/music/", name, handleLoaded, 1);
             var music = this.sounds[name][0];
             music.loop = true;
-            music.addEventListener('ended', function() { music.play() }, false);
+            //music.addEventListener('ended', function() { music.play() }, false);
         },
     
         getSound: function(name) {
