@@ -131,7 +131,7 @@ function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedT
         },
 
         initCursors: function() {
-            this.cursors["hand"] = this.sprites["hand"];
+            this.cursors["hand"] = '';
             this.cursors["sword"] = this.sprites["sword"];
             this.cursors["loot"] = this.sprites["loot"];
             this.cursors["target"] = this.sprites["target"];
