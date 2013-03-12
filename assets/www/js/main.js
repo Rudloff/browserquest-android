@@ -361,6 +361,12 @@ define(['jquery', 'app'], function($, App) {
                 game.audioManager.toggle();
             });
             
+            $('#chatinput').click(function(e) {
+                e.preventDefault();
+                return false;
+            });
+            
+            
             $(document).bind("keydown", function(e) {
                 var key = e.which,
                     $chat = $('#chatinput');
